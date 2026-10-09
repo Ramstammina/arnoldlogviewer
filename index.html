@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Arnold Log Inspector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Semi+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: sticky file bar + tab rail over a 1440px grid of instrument panels; dark-first like a render monitor */
+:root{
+  --bg:#111317; --panel:#181b21; --panel2:#1f232b; --line:#2a2f38; --track:#262a32;
+  --fg:#e5e7eb; --muted:#8a92a0; --dim:#5f6774;
+  --accent:#3ec7c2; --accent-ink:#06201f;
+  --ok:#6cc47a; --warn:#f0b23e; --err:#f06464; --info:#7ea6e8;
+  --warn-bg:rgba(240,178,62,.10); --err-bg:rgba(240,100,100,.11); --ok-bg:rgba(108,196,122,.10); --info-bg:rgba(126,166,232,.10);
+  --c1:#3ec7c2; --c2:#f0a43a; --c3:#8794f7; --c4:#e8678a; --c5:#9ccc5a; --c6:#c08ef0; --c7:#5aa9e6; --c8:#d6be92; --c9:#6b7380;
+  --display:'Saira Semi Condensed','Arial Narrow',system-ui,sans-serif;
+  --body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){
+  --bg:#f2f3f5; --panel:#ffffff; --panel2:#f6f7f9; --line:#dde1e7; --track:#e8ebef;
+  --fg:#171a1f; --muted:#5b6372; --dim:#8a92a0;
+  --accent:#0f8a86; --accent-ink:#ffffff;
+  --ok:#2f8a3f; --warn:#a96a00; --err:#c43030; --info:#2f62b8;
+  --warn-bg:rgba(220,150,20,.12); --err-bg:rgba(200,50,50,.09); --ok-bg:rgba(47,138,63,.09); --info-bg:rgba(47,98,184,.08);
+  --c1:#1aa39e; --c2:#e08a14; --c3:#5d6ae6; --c4:#d6456e; --c5:#6fa830; --c6:#9a5fd8; --c7:#2c86cf; --c8:#b39a68; --c9:#9aa1ad;
+  color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --bg:#f2f3f5; --panel:#ffffff; --panel2:#f6f7f9; --line:#dde1e7; --track:#e8ebef;
+  --fg:#171a1f; --muted:#5b6372; --dim:#8a92a0;
+  --accent:#0f8a86; --accent-ink:#ffffff;
+  --ok:#2f8a3f; --warn:#a96a00; --err:#c43030; --info:#2f62b8;
+  --warn-bg:rgba(220,150,20,.12); --err-bg:rgba(200,50,50,.09); --ok-bg:rgba(47,138,63,.09); --info-bg:rgba(47,98,184,.08);
+  --c1:#1aa39e; --c2:#e08a14; --c3:#5d6ae6; --c4:#d6456e; --c5:#6fa830; --c6:#9a5fd8; --c7:#2c86cf; --c8:#b39a68; --c9:#9aa1ad;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.5}
+.wrap{max-width:1440px;margin:0 auto;padding-inline:20px}
+@media (max-width:600px){.wrap{padding-inline:16px}}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-block:10px}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+.brand h1{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;margin:0;line-height:1}
+.brand h1 b{color:var(--accent);font-weight:700}
+.brand span{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.04em}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel2);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.files{display:flex;gap:6px;flex-wrap:wrap;padding-block:0 10px}
+.chipf{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:4px 6px 4px 10px;font-family:var(--mono);font-size:12px;cursor:pointer;max-width:100%}
+.chipf .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:360px}
+.chipf small{color:var(--muted)}
+.chipf.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.chipf .x{border:0;background:none;color:var(--muted);cursor:pointer;padding:0 4px;font-size:15px;line-height:1}
+.chipf .x:hover{color:var(--err)}
+.sample-tag{font-family:var(--body);font-size:10px;text-transform:uppercase;letter-spacing:.08em;background:var(--warn-bg);color:var(--warn);border-radius:3px;padding:1px 5px}
+
+.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;border-top:1px solid var(--line)}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:none;padding:10px 14px;cursor:pointer;color:var(--muted);font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.03em;border-bottom:2px solid transparent;white-space:nowrap;display:inline-flex;gap:6px;align-items:center}
+.tab:hover{color:var(--fg)}
+.tab.on{color:var(--fg);border-bottom-color:var(--accent)}
+.tab .cnt{font-family:var(--mono);font-size:10px;padding:0 5px;border-radius:8px;background:var(--panel2);color:var(--muted)}
+.tab .cnt.w{background:var(--warn-bg);color:var(--warn)}
+.tab .cnt.e{background:var(--err-bg);color:var(--err)}
+
+main{padding-block:20px 60px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(12,minmax(0,1fr))}
+.s12{grid-column:span 12}.s8{grid-column:span 8}.s7{grid-column:span 7}.s6{grid-column:span 6}.s5{grid-column:span 5}.s4{grid-column:span 4}.s3{grid-column:span 3}
+@media (max-width:1100px){.s4,.s3{grid-column:span 6}.s8,.s7,.s5{grid-column:span 12}}
+@media (max-width:760px){.s6,.s4,.s3{grid-column:span 12}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.panel h2{font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.03em;margin:0 0 12px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;text-wrap:balance}
+.panel h2 small{font-family:var(--body);font-weight:400;font-size:12px;color:var(--muted);letter-spacing:0}
+.panel h3{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:16px 0 8px;font-weight:600}
+.empty{color:var(--muted);font-size:13px;padding:8px 0}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)}
+
+/* header strip */
+.strip{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:baseline;margin-bottom:16px}
+.strip .fn{font-family:var(--display);font-weight:700;font-size:26px;line-height:1.1;letter-spacing:.01em;word-break:break-all}
+.strip .meta{display:flex;flex-wrap:wrap;gap:4px 18px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.strip .meta b{color:var(--fg);font-weight:500}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:4px;padding:2px 8px}
+.status.ok{background:var(--ok-bg);color:var(--ok)}.status.bad{background:var(--err-bg);color:var(--err)}.status.mid{background:var(--warn-bg);color:var(--warn)}
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.kpi{background:var(--panel);padding:14px 16px;min-width:0}
+.kpi .k{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.kpi .v{font-family:var(--display);font-weight:600;font-size:28px;line-height:1.15;margin-top:4px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .s{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kpi.warn .v{color:var(--warn)}.kpi.err .v{color:var(--err)}
+
+/* insights */
+.ins{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.ins li{display:grid;grid-template-columns:76px minmax(0,1fr);gap:12px;align-items:start;padding:10px 12px;border-radius:6px;background:var(--panel2)}
+.sev{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;border-radius:3px;padding:2px 0;text-align:center}
+.sev.critical{background:var(--err-bg);color:var(--err)}.sev.warning{background:var(--warn-bg);color:var(--warn)}.sev.info{background:var(--info-bg);color:var(--info)}.sev.good{background:var(--ok-bg);color:var(--ok)}
+.ins .t{font-weight:600}
+.ins .d{color:var(--muted);font-size:13px;margin-top:2px}
+.ins .d code{font-family:var(--mono);font-size:12px;color:var(--fg)}
+
+/* donut + legend */
+.dl{display:grid;grid-template-columns:160px minmax(0,1fr);gap:16px;align-items:center}
+@media (max-width:420px){.dl{grid-template-columns:1fr}.dl svg{max-width:180px;margin:0 auto}}
+.donut{width:100%;height:auto;max-width:100%}
+.donut .dc{font-family:var(--display);font-weight:600;font-size:22px;fill:var(--fg)}
+.donut .ds{font-family:var(--body);font-size:10px;fill:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.legend{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px;min-width:0}
+.legend li{display:grid;grid-template-columns:10px minmax(0,1fr) auto 48px;gap:8px;align-items:center;font-size:12.5px}
+.legend i{width:10px;height:10px;border-radius:2px}
+.legend .ll{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.legend .lv,.legend .lp{font-family:var(--mono);font-size:11.5px;text-align:right;font-variant-numeric:tabular-nums}
+.legend .lp{color:var(--muted)}
+
+/* tree */
+.tree{display:flex;flex-direction:column}
+.tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(60px,26%) 92px 56px;gap:10px;align-items:center;padding:4px 0;border-bottom:1px solid var(--track);font-size:13px}
+.tr:last-child{border-bottom:0}
+.tr .tl{padding-left:calc(var(--d,0) * 16px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr.root .tl{font-weight:600}
+.tr.rem .tl{color:var(--muted);font-style:italic}
+.tr .tb{height:6px;background:var(--track);border-radius:3px;overflow:hidden}
+.tr .tb b{display:block;height:100%;background:var(--accent);border-radius:3px}
+.tr.d1 .tb b{background:var(--c3)}.tr.d2 .tb b{background:var(--c8)}.tr.d3 .tb b{background:var(--c9)}
+.tr .tv,.tr .tp{font-family:var(--mono);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.tr .tp{color:var(--muted)}
+.tr .tl .ut{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:8px;font-weight:400}
+@media (max-width:520px){.tr{grid-template-columns:minmax(0,1fr) 80px 48px}.tr .tb{display:none}}
+
+/* bars */
+.bars{display:flex;flex-direction:column;gap:6px}
+.br{display:grid;grid-template-columns:minmax(0,38%) minmax(0,1fr) 84px;gap:10px;align-items:center;font-size:12.5px}
+.br .bl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.br .bl em{font-style:normal;color:var(--muted);font-size:11.5px}
+.br .bt{height:14px;background:var(--track);border-radius:3px;overflow:hidden}
+.br .bt b{display:block;height:100%;border-radius:3px}
+.br .bv{font-family:var(--mono);font-size:11.5px;text-align:right;font-variant-numeric:tabular-nums}
+
+/* tables */
+.tw{overflow-x:auto;max-width:100%}
+table.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600;text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);white-space:nowrap;background:var(--panel)}
+.tbl th.n,.tbl td.n{text-align:right}
+.tbl th[data-k]{cursor:pointer;user-select:none}
+.tbl th[data-k]:hover{color:var(--fg)}
+.tbl th .ar{color:var(--accent)}
+.tbl td{padding:6px 10px;border-bottom:1px solid var(--track);vertical-align:top}
+.tbl td.n{font-family:var(--mono);font-size:12px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl td.p{font-family:var(--mono);font-size:11.5px;word-break:break-all;min-width:220px}
+.tbl tr.tot td{font-weight:600;border-top:1px solid var(--line)}
+.tbl tbody tr:hover td{background:var(--panel2)}
+.flag{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.05em;border-radius:3px;padding:1px 5px;margin:1px 4px 1px 0;background:var(--warn-bg);color:var(--warn);font-family:var(--body)}
+.flag.e{background:var(--err-bg);color:var(--err)}
+.flag.ok{background:var(--ok-bg);color:var(--ok)}
+.heat{border-radius:3px;padding:2px 6px;display:inline-block;min-width:52px}
+
+/* kv */
+.kv{display:grid;grid-template-columns:minmax(110px,max-content) minmax(0,1fr);gap:5px 18px;font-size:13px;margin:0}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-family:var(--mono);font-size:12.5px;word-break:break-word;min-width:0}
+
+/* charts */
+.chart{width:100%;height:auto;display:block}
+.chart text{font-family:var(--mono);font-size:10.5px;fill:var(--muted)}
+.chart .grid line{stroke:var(--track)}
+.chart .mk line{stroke:var(--dim);stroke-dasharray:3 3}
+.chart .mk text{fill:var(--dim)}
+.phase{display:flex;height:26px;border-radius:5px;overflow:hidden;background:var(--track);gap:1px}
+.phase span{display:block;height:100%;min-width:2px}
+.plg{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;font-size:12.5px}
+.plg span{display:inline-flex;gap:6px;align-items:center}
+.plg i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.plg b{font-family:var(--mono);font-weight:500;font-size:12px}
+
+/* warnings */
+.wl{display:flex;flex-direction:column;gap:6px}
+.wi{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:12px;align-items:start;padding:8px 10px;border-radius:6px;background:var(--panel2);font-size:13px}
+.wi .wc{font-family:var(--display);font-weight:700;font-size:20px;line-height:1;text-align:right;color:var(--warn)}
+.wi.e .wc{color:var(--err)}
+.wi .wm{font-family:var(--mono);font-size:12px;word-break:break-word}
+.wi .wt{font-size:11px;color:var(--muted);margin-top:3px}
+.lnk{border:0;background:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0;white-space:nowrap}
+.lnk:hover{text-decoration:underline}
+
+/* log viewer */
+.lf{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.lf input[type=search]{flex:1 1 240px;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+.lf select{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.lf label{display:inline-flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.logv{font-family:var(--mono);font-size:12px;line-height:1.55;background:var(--bg);border:1px solid var(--line);border-radius:6px;max-height:70vh;overflow:auto}
+.lr{display:grid;grid-template-columns:52px 64px 74px minmax(0,1fr);gap:10px;padding:0 10px;white-space:pre-wrap;word-break:break-word}
+.lr:hover{background:var(--panel2)}
+.lr .ln{color:var(--dim);text-align:right;user-select:none}
+.lr .lt,.lr .lm{color:var(--muted);font-variant-numeric:tabular-nums}
+.lr.w{background:var(--warn-bg)}.lr.w .lx{color:var(--warn)}
+.lr.e{background:var(--err-bg)}.lr.e .lx{color:var(--err)}
+.lr .tag{color:var(--accent)}
+.lr mark{background:var(--warn);color:#111;border-radius:2px}
+@media (max-width:600px){.lr{grid-template-columns:40px minmax(0,1fr)}.lr .lt,.lr .lm{display:none}}
+pre.raw{font-family:var(--mono);font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;overflow:auto;max-height:420px;margin:0}
+details summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin:10px 0 6px}
+
+/* drop + paste */
+.drop{position:fixed;inset:0;z-index:50;background:color-mix(in srgb,var(--bg) 85%,transparent);display:flex;align-items:center;justify-content:center;border:3px dashed var(--accent)}
+.drop div{font-family:var(--display);font-size:30px;font-weight:600;color:var(--accent)}
+.paste{background:var(--panel);border:1px solid var(--accent);border-radius:8px;padding:14px;margin-bottom:16px}
+.paste textarea{width:100%;min-height:200px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;font-family:var(--mono);font-size:12px;resize:vertical}
+.paste .row{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px 14px;z-index:60;font-size:13px;max-width:calc(100% - 32px)}
+.hint{font-size:12.5px;color:var(--muted);margin:0 0 16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint code{font-family:var(--mono);font-size:12px;color:var(--fg);background:var(--panel2);padding:1px 5px;border-radius:3px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><h1>Arnold <b>Log</b> Inspector</h1><span>render log · stats · profile</span></div>
+    <button class="btn" id="pasteBtn" type="button">Paste log</button>
+    <label class="btn primary" for="fileIn">Open logs…</label>
+    <input id="fileIn" type="file" multiple accept=".log,.txt,.json,text/plain,application/json" hidden>
+  </div>
+  <div class="wrap files" id="files"></div>
+  <div class="wrap"><nav class="tabs" id="tabs" role="tablist"></nav></div>
+</header>
+<main class="wrap">
+  <div id="pastePanel" class="paste" hidden>
+    <textarea id="pasteTa" placeholder="Paste the contents of an Arnold .log (kick, HtoA, MtoA…) or a stats/profile .json"></textarea>
+    <div class="row"><button class="btn" id="pasteCancel" type="button">Cancel</button><button class="btn primary" id="pasteGo" type="button">Analyze</button></div>
+  </div>
+  <div id="view"></div>
+</main>
+<div class="drop" id="drop" hidden><div>Drop Arnold logs to analyze</div></div>
+
+<script>
+/* ============================== helpers ============================== */
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtInt=n=>n==null||isNaN(n)?'—':Math.round(n).toLocaleString('en-US');
+const fmtNum=(n,d=2)=>n==null||isNaN(n)?'—':(+n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtPct=(n,d=1)=>n==null||isNaN(n)?'—':(+n).toFixed(d)+'%';
+function fmtDur(s){
+  if(s==null||isNaN(s)) return '—';
+  if(s<60) return s.toFixed(s<10?2:1)+'s';
+  const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60;
+  return h?`${h}h ${String(m).padStart(2,'0')}m ${String(Math.round(r)).padStart(2,'0')}s`:`${m}m ${r.toFixed(1).padStart(4,'0')}s`;
+}
+function fmtClock(s){ s=Math.round(s); const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(r).padStart(2,'0'); }
+function fmtMB(mb){
+  if(mb==null||isNaN(mb)) return '—';
+  if(mb>=1024) return (mb/1024).toFixed(mb>=10240?1:2)+' GB';
+  if(mb>=1) return mb.toFixed(mb>=100?0:1)+' MB';
+  return Math.round(mb*1024)+' KB';
+}
+function parseDur(str){ str=String(str).trim().replace(/s$/,''); return str.split(':').map(Number).reduce((a,v)=>a*60+v,0); }
+function sizeToMB(str){
+  const m=String(str||'').match(/([\d.]+)\s*(TB|GB|MB|KB|B)?/i); if(!m) return null;
+  const f={TB:1048576,GB:1024,MB:1,KB:1/1024,B:1/1048576}[(m[2]||'MB').toUpperCase()]; return +m[1]*f;
+}
+const sum=(a,f=x=>x)=>a.reduce((s,x)=>s+(+f(x)||0),0);
+const COL=['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)','var(--c7)','var(--c8)'];
+const OTHER='var(--c9)';
+
+/* ============================== log parser ============================== */
+const LINE_RE=/^\s*(\d+):(\d\d):(\d\d)\s+(\d+)MB\s+(?:(WARNING|ERROR|INFO|DEBUG)\s+)?\|\s?(.*)$/;
+
+function emptyModel(name){
+  return {name,kind:'log',lines:[],info:{libs:[],gpus:[],pluginPaths:[],pluginNodes:[],aovs:[],outputs:[],samples:[],license:[],subdiv:[],accel:[],written:[]},
+    progress:[],memSeries:[],warnings:[],errors:[],warnSummary:[],time:{},selfCat:[],selfNode:[],memTrees:[],rays:null,shaders:null,
+    tables:[],rawSections:[],tex:null,phases:[],insights:[]};
+}
+
+function parseLog(text,name){
+  const L=emptyModel(name), I=L.info;
+  const raw=text.replace(/\r\n?/g,'\n').split('\n');
+  if(raw.length && raw[raw.length-1]==='') raw.pop();
+  let lastT=0,lastMem=null;
+  raw.forEach((line,i)=>{
+    const m=line.match(LINE_RE);
+    let o;
+    if(m){ o={n:i+1,t:+m[1]*3600+ +m[2]*60+ +m[3],mem:+m[4],level:m[5]||'',msg:m[6]}; lastT=o.t; lastMem=o.mem; }
+    else { const lv=line.match(/^\s*(WARNING|ERROR)\b/); o={n:i+1,t:lastT,mem:null,level:lv?lv[1]:'',msg:line,untimed:true}; }
+    const tg=o.msg.trim().match(/^\[([^\]]{1,28})\]/); o.tag=tg?tg[1]:'';
+    L.lines.push(o);
+  });
+
+  // sections (stats blocks are delimited by long dashed rules)
+  const sections=[]; let cur=null;
+  for(const o of L.lines){
+    const s=o.msg.trim();
+    if(/^-{12,}$/.test(s)){ cur={start:o.n,lines:[]}; sections.push(cur); o.stat=true; continue; }
+    if(cur && s && !/^(releasing resources|Arnold shutdown|render done$)/.test(s)){ cur.lines.push(o.msg); o.stat=true; }
+  }
+
+  let firstRender=null;
+  for(const o of L.lines){
+    const s=o.msg.trim(); let m;
+    if(!o.untimed && (o.mem!=null)) L.memSeries.push([o.t,o.mem]);
+    if(o.level==='WARNING') L.warnings.push(o);
+    if(o.level==='ERROR') L.errors.push(o);
+    if(o.stat) continue;
+    if(!I.started && (m=s.match(/^log started (.+)/))) I.started=m[1];
+    else if(!I.version && (m=s.match(/^Arnold (\d+(?:\.\d+)+)\s*(?:\[([\w.]+)\])?\s*(.*)$/))){
+      I.version=m[1]; I.build=m[2]||''; const rest=m[3]||'';
+      const parts=rest.split(/\s+/).filter(Boolean);
+      I.platform=parts.slice(0,2).join(' ');
+      const d=rest.match(/(\d{4}\/\d\d\/\d\d \d\d:\d\d:\d\d)/); if(d) I.buildDate=d[1];
+      parts.forEach(p=>{ const q=p.match(/^([a-z][\w]*?)-(\d[\w.]*)$/i); if(q) I.libs.push([q[1],q[2]]); });
+    }
+    else if((m=s.match(/^running on ([^,]+),\s*pid=(\d+)/))){ I.host=m[1]; I.pid=m[2]; }
+    else if((m=s.match(/^(\d+)\s*x\s*(.+?)\s*\((\d+) cores?,\s*(\d+) logical\)\s*with\s*(\d+)\s*MB/i))){ I.sockets=+m[1]; I.cpu=m[2]; I.cores=+m[3]; I.logical=+m[4]; I.ramMB=+m[5]; }
+    else if((m=s.match(/^GPU (\d+):\s*(.+?)\s*@\s*(\d+)\s*MHz.*?with\s*(\d+)\s*MB/))){ I.gpus.push({id:m[1],name:m[2],mhz:m[3],mb:+m[4]}); }
+    else if((m=s.match(/NVIDIA driver version ([\d.]+)/))) I.driver=m[1];
+    else if(o.n<40 && !I.os && /(kernel|Windows \d|Windows Server|macOS|Darwin|Rocky Linux|CentOS|Ubuntu|Red Hat|AlmaLinux|Debian)/i.test(s) && !/^Arnold /.test(s)) I.os=s;
+    else if((m=s.match(/loading plugins from (.+?)\s*\.\.\.?$/))){ I.pluginPaths.push(m[1]); }
+    else if((m=s.match(/^loaded (\d+) plugins? from (\d+) lib\(?s?\)?(?: in ([\d:.]+))?/))){ I.plugins=+m[1]; I.pluginLibs=+m[2]; if(m[3]) I.pluginTime=parseDur(m[3]); }
+    else if((m=s.match(/^(\S+\.(?:so|dll|dylib)):\s*(\S+) uses Arnold/))){ I.pluginNodes.push([m[1],m[2]]); }
+    if((m=s.match(/\b(HtoA|MtoA|C4DtoA|KtoA|MAXtoA|SItoA|UsdArnold|arnold-usd)\s+v?([\d.]+)\s*(.*)$/i)) && !I.dcc){ I.dcc=`${m[1]} ${m[2]}`; I.host_app=m[3]; }
+    if((m=s.match(/OCIO config (?:file )?(.+)$/i))) I.ocio=m[1];
+    if((m=s.match(/rendering color space is "([^"]+)"/))) I.colorspace=m[1];
+    if((m=s.match(/reading scene from (.+)$/)) || (m=s.match(/\[ass\] loading (.+?)(?: \.\.\.)?$/))) I.scene=I.scene||m[1];
+    if((m=s.match(/^rendering image at (\d+) x (\d+)(?:,\s*(\d+) AA samples?)?/))){ I.w=+m[1]; I.h=+m[2]; if(m[3]) I.aa=+m[3]; }
+    if((m=s.match(/^AA samples max\s+(\d+)/))) I.aaMax=+m[1];
+    if((m=s.match(/^AA sample clamp\s+([\d.]+)/))) I.clamp=+m[1];
+    if((m=s.match(/^(diffuse|specular|transmission|volume indirect|volume|sss|bssrdf)\s+samples\s+(\d+)(?:\s*\/\s*depth\s+(\d+))?/))) I.samples.push({type:m[1],samples:+m[2],depth:m[3]!=null?+m[3]:null});
+    if((m=s.match(/^total\s+depth\s+(\d+)/))) I.totalDepth=+m[1];
+    if((m=s.match(/^transparency\s+depth\s+(\d+)/))) I.transpDepth=+m[1];
+    if((m=s.match(/adaptive sampling (on|off|enabled|disabled)(?:,\s*threshold ([\d.]+))?/i))){ I.adaptive=/on|enabled/i.test(m[1]); if(m[2]) I.adaptiveThr=+m[2]; }
+    if((m=s.match(/using (\d+) threads/))) I.threads=+m[1];
+    if((m=s.match(/render device:\s*(\w+)/i))) I.device=m[1];
+    if((m=s.match(/registered driver: "([^"]+)" \((\w+)\)\s*->\s*(.+)$/))) I.outputs.push({name:m[1],type:m[2],path:m[3]});
+    if((m=s.match(/\[aov\]\s+\*\s+"([^"]+)" of type (\w+)(?: filtered by "([^"]+)")?/))) I.aovs.push({name:m[1],type:m[2],filter:m[3]||'',driver:I.outputs.length?I.outputs[I.outputs.length-1].name:''});
+    if((m=s.match(/done preparing (\d+) AOVs/))) I.aovCount=+m[1];
+    if((m=s.match(/^initializing (\d+) nodes/))){ I.nodes=+m[1]; L._tInit=L._tInit??o.t; }
+    if((m=s.match(/^node initialization done in ([\d:.]+)/))) I.initTime=parseDur(m[1]);
+    if((m=s.match(/^updating (\d+) nodes/))){ I.nodesUpd=+m[1]; L._tUpd=L._tUpd??o.t; }
+    if((m=s.match(/^node update done in ([\d:.]+)/))) I.updTime=parseDur(m[1]);
+    if((m=s.match(/\[lights?\]\s*(.+)$/))) I.lights=m[1];
+    if((m=s.match(/scene bounds: \(([^)]+)\)\s*->\s*\(([^)]+)\)/))) I.bounds=[m[1].trim().split(/\s+/).map(Number),m[2].trim().split(/\s+/).map(Number)];
+    if((m=s.match(/\[subdiv\]\s*(.+)$/))) I.subdiv.push(m[1]);
+    if((m=s.match(/\[accel\]\s*(.+)$/))) I.accel.push(m[1]);
+    if((m=s.match(/\[(clm|rlm|license|licensing)\]\s*(.+)$/i))) I.license.push(m[2]);
+    if((m=s.match(/texture cache max memory (\d+)\s*MB/))) I.texMax=+m[1];
+    if((m=s.match(/(\d+)%\s+done\s+-\s+(\d+)\s+rays\/pixel/))){ L.progress.push({t:o.t,pct:+m[1],rpp:+m[2],mem:o.mem}); if(firstRender==null) firstRender=o.t; }
+    else if((m=s.match(/(\d+)%\s+done\b/))){ L.progress.push({t:o.t,pct:+m[1],rpp:null,mem:o.mem}); if(firstRender==null) firstRender=o.t; }
+    if((m=s.match(/^starting render/))) L._tRender=L._tRender??o.t;
+    if((m=s.match(/^render done in ([\d:.]+)/))) { I.renderDone=parseDur(m[1]); L._tDone=o.t; }
+    if((m=s.match(/writing file `([^']+)'/))){ I.written.push({path:m[1],t:o.t}); L._tWrite=L._tWrite??o.t; }
+    if(/^releasing resources/.test(s)) L._tRelease=o.t;
+    if(/^Arnold shutdown/.test(s)) I.shutdown=true;
+    if(/signal caught|segmentation fault|stack trace|crash(ed)?\b|aborting|out of memory/i.test(s)) { I.crash=I.crash||s; }
+  }
+  L._tRender=L._tRender??firstRender;
+
+  // stats sections
+  for(const sec of sections){
+    if(!sec.lines.length) continue;
+    const head=sec.lines[0].trim();
+    if(/^(scene creation time|frame time|render time|total time)\b/i.test(head)){
+      for(const r of parseTree(sec.lines,'time')) L.time[r.label.toLowerCase()]=r;
+    } else if(/^top session self-times by category/i.test(head)) L.selfCat=flatTime(sec.lines.slice(1));
+    else if(/^top session self-times by node/i.test(head)) L.selfNode=flatTime(sec.lines.slice(1));
+    else if(/memory used/i.test(head) && /[\d.]+\s*(MB|GB)/.test(head)) L.memTrees.push(...parseTree(sec.lines,'mem'));
+    else if(/^ray counts/i.test(head)) L.rays=parseCountTable(sec.lines);
+    else if(/^shader calls/i.test(head)) L.shaders=parseCountTable(sec.lines);
+    else if(/OpenImageIO|ImageCache|Texture statistics/i.test(head) || sec.lines.some(l=>/OpenImageIO/.test(l))) L.tex=parseOIIO(sec.lines);
+    else if(/^number of warnings/i.test(head)) L.warnSummary=sec.lines.slice(1).map(l=>l.match(/^\s*(\d+):\s*(.+)$/)).filter(Boolean).map(m=>({count:+m[1],msg:m[2]}));
+    else {
+      const tb=parseGenericTable(sec.lines);
+      if(tb) L.tables.push(tb); else L.rawSections.push({title:head,lines:sec.lines});
+    }
+  }
+  finish(L);
+  return L;
+}
+
+function parseTree(lines,kind){
+  const roots=[],stack=[];
+  for(const raw of lines){
+    const m=raw.match(/^(\s*)(\S.*?)\s{2,}(\S.*)$/); if(!m) continue;
+    const ind=m[1].length,label=m[2].trim(),rest=m[3];
+    let v;
+    if(kind==='time'){ const t=rest.match(/^((?:\d+:)?\d+:\d+(?:\.\d+)?|\d+(?:\.\d+)?s?)(?=\s|$)/); if(!t) continue; v=parseDur(t[1]); }
+    else { const t=rest.match(/^([\d.]+)\s*(KB|MB|GB|B)\b/i); if(!t) continue; v=sizeToMB(t[0]); }
+    const util=rest.match(/utilization\s*\(\s*([\d.]+)%\)/), pct=rest.match(/\(\s*([\d.]+)%\)/);
+    const node={label,v,ind,util:util?+util[1]:null,pct:pct&&!util?+pct[1]:null,children:[]};
+    while(stack.length && stack[stack.length-1].ind>=ind) stack.pop();
+    if(stack.length) stack[stack.length-1].children.push(node); else roots.push(node);
+    stack.push(node);
+  }
+  return roots;
+}
+function flatTime(lines){
+  const out=[];
+  for(const l of lines){ const m=l.match(/^\s*(\S.*?)\s{2,}((?:\d+:)?\d+:\d+(?:\.\d+)?)\s*(?:\(\s*([\d.]+)%\))?/); if(m) out.push({label:m[1].trim(),v:parseDur(m[2]),pct:m[3]!=null?+m[3]:null}); }
+  return out;
+}
+function parseCountTable(lines){
+  const rows=[]; let depth=null;
+  for(const l of lines.slice(1)){
+    if(/by ray depth:/i.test(l)){ depth={levels:(l.split(/by ray depth:/i)[1].match(/\d+/g)||[]),rows:[]}; continue; }
+    if(depth){ const m=l.match(/^\s*([A-Za-z_][\w ]*?)\s+((?:[\d.]+%?\s*)+)$/); if(m) depth.rows.push({name:m[1].trim(),vals:m[2].trim().split(/\s+/).map(parseFloat)}); continue; }
+    const m=l.match(/^\s*([A-Za-z_][\w .\/-]*?)\s+(\d+)\s*(\(.*)?$/); if(!m) continue;
+    const nums=(m[3]||'').match(/-?[\d.]+/g)||[];
+    rows.push({name:m[1].trim(),total:+m[2],perPixel:nums[0]!=null?+nums[0]:null,perSample:nums[1]!=null?+nums[1]:null,pct:nums[2]!=null?+nums[2]:null,avgHits:nums[3]!=null?+nums[3]:null,maxHits:nums[4]!=null?+nums[4]:null});
+  }
+  const total=rows.find(r=>r.name==='total');
+  return {rows:rows.filter(r=>r.name!=='total'),total,depth};
+}
+function parseGenericTable(lines){
+  const head=lines[0];
+  const cols=[...head.matchAll(/\(([^)]*)\)/g)].map(x=>x[1].trim()).filter(Boolean);
+  if(!cols.length) return null;
+  const title=head.split('(')[0].replace(/:\s*$/,'').trim();
+  const rows=[];
+  for(const l of lines.slice(1)){
+    const groups=[...l.matchAll(/\(([^)]*)\)/g)].map(x=>x[1].trim());
+    let name, vals;
+    if(groups.length){ name=l.slice(0,l.indexOf('(')).trim(); vals=groups.flatMap(g=>g.split(/\s+/).filter(Boolean)); }
+    else { const p=l.trim().split(/\s{2,}/); name=p[0]; vals=p.slice(1); }
+    if(!name) continue;
+    rows.push({name,vals,ind:(l.match(/^\s*/)[0].length)});
+  }
+  if(!rows.length) return null;
+  return {title,cols,rows,raw:lines};
+}
+const FILE_RE=/^\s*(\d+)\s+(\d+)\s+(\d+)\s+([\d.]+)\s+(?:(\d+)\s+([\d.]+)\s+)?([\d.]+)s\s+(\d+x\d+(?:x\d+)?\.\S+)\s+(\S+)(.*)$/;
+function parseOIIO(lines){
+  const kv={},files=[],queries=[];
+  for(const l of lines){
+    let m=l.match(FILE_RE);
+    if(m){ const flags=(m[10].match(/\b(UNTILED|UNMIPMAPPED|BROKEN|CONSTANT|MIP-UNUSED|ONLY-MIP0)\b/g)||[]);
+      const ext=(m[9].match(/\.(\w+)$/)||[])[1]||''; if(!/^(tx|tex|rat)$/i.test(ext)) flags.push('NOT .TX');
+      const res=m[8].match(/(\d+)x(\d+)(?:x(\d+))?\.(\S+)/);
+      files.push({idx:+m[1],opens:+m[2],tiles:+m[3],mb:+m[4],redTiles:m[5]?+m[5]:0,redMB:m[6]?+m[6]:0,io:+m[7],res:m[8],w:+res[1],h:+res[2],ch:res[3]?+res[3]:null,fmt:res[4],path:m[9],flags:[...new Set(flags)],mips:(m[10].match(/MIP-COUNT\s*\[([^\]]*)\]/)||[])[1]||''});
+      continue; }
+    m=l.match(/^\s*(texture(?: 3d)?|shadow|environment|gettextureinfo|getimagespec|imagespec)\s*:\s*(\d+)\s+queries(?:\s+in\s+(\d+)\s+batches)?/i);
+    if(m){ queries.push({type:m[1],q:+m[2],b:m[3]!=null?+m[3]:null}); continue; }
+    m=l.match(/^\s*([A-Za-z][^:]{1,64}?)\s*:\s*(.+)$/);
+    if(m){ const k=m[1].toLowerCase().trim(); if(!(k in kv)) kv[k]=m[2].trim(); }
+  }
+  const g=k=>kv[k];
+  const t={raw:lines,files,queries,kv,
+    unique:+((g('images')||'').match(/(\d+)\s+unique/)||[])[1]||files.length||null,
+    refMB:sizeToMB(g('total pixel data size of all images referenced')),
+    fileMB:sizeToMB(g('total actual file size of all images referenced')),
+    readMB:sizeToMB(g('pixel data read')),
+    io:(g('file i/o time')||'').match(/([\d.]+)s/)?parseDur((g('file i/o time').match(/([\d.]+)s/)||[])[1]):null,
+    ioThreads:+((g('file i/o time')||'').match(/for (\d+) threads/)||[])[1]||null,
+    openTime:(g('file open time only')||'').match(/([\d.]+)s/)?+(g('file open time only').match(/([\d.]+)s/))[1]:null,
+    peakMB:sizeToMB(g('peak cache memory')),
+    mainMiss:g('main cache misses'), microMiss:g('micro-cache misses'),
+    tileReq:+((g('total tile requests')||'').replace(/,/g,'').match(/\d+/)||[])[0]||null,
+    tiles:g('tiles'), broken:g('broken or invalid files'), options:g('options'),
+    redundant:g('redundant reads')
+  };
+  if(t.io==null && files.length) t.io=sum(files,f=>f.io);
+  if(t.readMB==null && files.length) t.readMB=sum(files,f=>f.mb);
+  return t;
+}
+
+/* ---------- JSON stats / profile ---------- */
+function parseAny(text,name){
+  const tt=text.trim();
+  if(tt[0]==='{'||tt[0]==='['){ try{ return parseJSON(JSON.parse(tt),name); }catch(e){ /* fall through to log */ } }
+  const L=parseLog(text,name);
+  if(!L.lines.some(l=>!l.untimed) && !L.info.version && !Object.keys(L.time).length) throw new Error('this does not look like an Arnold log');
+  return L;
+}
+function hasKey(o,unit,d=0){ if(!o||typeof o!=='object'||d>8) return false; for(const k in o){ const kl=k.toLowerCase(); if(kl===unit||kl.endsWith(' '+unit)) return true; if(hasKey(o[k],unit,d+1)) return true; } return false; }
+function jnode(label,o,unit,scale){
+  let v=null; const kids=[];
+  if(typeof o==='number') v=o*scale;
+  else if(o&&typeof o==='object'){
+    for(const k of Object.keys(o)){ const val=o[k],kl=k.toLowerCase();
+      if(kl===unit){ if(typeof val==='number') v=val*scale; continue; }
+      if(kl.endsWith(' '+unit)&&typeof val==='number'){ kids.push({label:k.slice(0,-unit.length-1),v:val*scale,children:[]}); continue; }
+      if(val&&typeof val==='object'&&hasKey(val,unit)) kids.push(jnode(k,val,unit,scale));
+    }
+  }
+  if(v==null) v=sum(kids,k=>k.v);
+  return {label,v,children:kids};
+}
+function jfind(o,key,d=0){ if(!o||typeof o!=='object'||d>10) return undefined; for(const k in o) if(k.toLowerCase()===key) return o[k]; for(const k in o){ const r=jfind(o[k],key,d+1); if(r!==undefined) return r; } return undefined; }
+function parseJSON(obj,name){
+  const L=emptyModel(name); L.kind='json'; const I=L.info;
+  const pretty=JSON.stringify(obj,null,2).split('\n');
+  L.lines=pretty.slice(0,20000).map((msg,i)=>({n:i+1,t:0,mem:null,level:'',msg,tag:'',untimed:true}));
+  const ev=Array.isArray(obj)?obj:(obj.traceEvents||null);
+  if(ev){
+    L.kind='profile';
+    const byName={},byCat={}; let t0=Infinity,t1=0;
+    for(const e of ev){ if(e.ph!=='X'||!e.dur) continue; const k=e.name||'?'; byName[k]=(byName[k]||0)+e.dur; const c=e.cat||'uncategorized'; byCat[c]=(byCat[c]||0)+e.dur; t0=Math.min(t0,e.ts); t1=Math.max(t1,e.ts+e.dur); }
+    const tot=(t1-t0)||1;
+    L.selfNode=Object.entries(byName).sort((a,b)=>b[1]-a[1]).slice(0,60).map(([label,v])=>({label,v:v/1e6,pct:null}));
+    L.selfCat=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([label,v])=>({label,v:v/1e6,pct:null}));
+    I.profileSpan=tot/1e6;
+  }
+  for(const key of ['scene creation time','frame time','render time']){ const o=jfind(obj,key); if(o!==undefined && hasKey({x:o},'microseconds')) L.time[key]=jnode(key,o,'microseconds',1e-6); }
+  const mem=jfind(obj,'peak cpu memory used'); if(mem!==undefined) L.memTrees.push(jnode('peak CPU memory used',mem,'bytes',1/1048576));
+  const rc=jfind(obj,'ray counts');
+  if(rc&&typeof rc==='object'){ const rows=[]; for(const k in rc){ const r=rc[k]; if(r&&typeof r==='object'){ rows.push({name:k,total:r.rays??r.count??r.total??null,perPixel:r['rays/pixel']??r['per pixel']??null,perSample:r['rays/sample']??r['per sample']??null,pct:null,avgHits:r['avg hits']??null,maxHits:r['max hits']??null}); } }
+    const total=rows.find(r=>r.name==='total'); const rr=rows.filter(r=>r.name!=='total'); const T=total?.total||sum(rr,r=>r.total); rr.forEach(r=>r.pct=r.total!=null?r.total/T*100:null); L.rays={rows:rr,total:total||{name:'total',total:T,perPixel:sum(rr,r=>r.perPixel)},depth:null}; }
+  I.host=jfind(obj,'host name')??jfind(obj,'host')??''; I.version=jfind(obj,'arnold version')??jfind(obj,'version')??''; I.started=jfind(obj,'date')??'';
+  const res=jfind(obj,'resolution'); if(Array.isArray(res)){ I.w=res[0]; I.h=res[1]; }
+  finish(L); return L;
+}
+
+/* ---------- derived values + insights ---------- */
+function finish(L){
+  const I=L.info;
+  const ft=L.time['frame time']||L.time['render time'];
+  L.frameTime=ft?ft.v:(I.renderDone??(L.progress.length>1?L.progress[L.progress.length-1].t-L.progress[0].t:null));
+  L.util=ft?ft.util:null;
+  L.sceneTime=L.time['scene creation time']?.v??null;
+  const mt=L.memTrees.find(t=>/cpu/i.test(t.label))||L.memTrees[0];
+  L.memTree=mt||null;
+  L.peakMB=mt?mt.v:(L.memSeries.length?Math.max(...L.memSeries.map(p=>p[1])):null);
+  L.wallTime=L.lines.length&&!L.lines[0].untimed?L.lines[L.lines.length-1].t-L.lines[0].t:null;
+  // wall-clock phases from log markers
+  const mk=[];
+  const first=re=>{ const o=L.lines.find(o=>!o.stat&&!o.untimed&&re.test(o.msg.trim())); return o?o.t:null; };
+  if(L.lines.length&&!L.lines[0].untimed){
+    const t0=L.lines[0].t, tEnd=L.lines[L.lines.length-1].t;
+    const cand=[['Startup',t0],['Plugins',first(/^loading plugins|^loaded \d+ plugins/)],['Scene load',first(/reading scene|\[ass\] loading|\[usd\] load|loading scene/)],['Node init',L._tInit],['Update & accel',L._tUpd],['Rendering',L._tRender],['Output write',L._tWrite],['Shutdown',L._tRelease]].filter(x=>x[1]!=null);
+    cand.sort((a,b)=>a[1]-b[1]);
+    for(let i=0;i<cand.length;i++){ const end=i<cand.length-1?cand[i+1][1]:tEnd; mk.push({label:cand[i][0],t:cand[i][1],d:Math.max(0,end-cand[i][1])}); }
+  }
+  L.phases=mk.filter(p=>p.d>0||p.label==='Rendering');
+  L.uniqueWarnings=groupMsgs(L.warnings); L.uniqueErrors=groupMsgs(L.errors);
+  L.insights=insights(L);
+}
+function normMsg(s){ return s.replace(/"[^"]*"/g,'"…"').replace(/`[^']*'/g,'`…\'').replace(/(\/[\w.<>{}%$@#+-]+)+/g,'…').replace(/\b\d+(\.\d+)?\b/g,'#'); }
+function groupMsgs(arr){
+  const m=new Map();
+  for(const o of arr){ const k=normMsg(o.msg.trim()); if(!m.has(k)) m.set(k,{key:k,first:o,count:0,tag:o.tag,items:[]}); const g=m.get(k); g.count++; if(g.items.length<6) g.items.push(o); }
+  return [...m.values()].sort((a,b)=>b.count-a.count);
+}
+function findNode(tree,re){ if(!tree) return null; if(re.test(tree.label)) return tree; for(const c of tree.children){ const r=findNode(c,re); if(r) return r; } return null; }
+function insights(L){
+  const I=L.info,out=[],add=(sev,t,d)=>out.push({sev,t,d});
+  if(L.errors.length) add('critical',`${L.errors.length} error${L.errors.length>1?'s':''} in the log`,`First: <code>${esc(L.errors[0].msg.trim().slice(0,160))}</code>`);
+  if(I.crash) add('critical','Possible crash or abort',`<code>${esc(I.crash.slice(0,160))}</code>`);
+  if(L.kind==='log' && !I.renderDone && !L.progress.some(p=>p.pct===100) && !L.time['frame time']) add('critical','Render did not finish','No "render done" line or 100% progress was found. The log may be truncated or the render was killed (farm timeout, OOM).');
+  else if(L.kind==='log' && !I.shutdown && L.frameTime) add('info','No clean shutdown recorded','The log ends without "Arnold shutdown". Fine for interactive sessions; on the farm it can mean the process was terminated after writing.');
+  if(L.util!=null){
+    if(L.util<70) add('warning',`Low machine utilization during the frame: ${fmtPct(L.util)}`,`Threads were waiting for a large part of the frame. Look at <b>thread blocked</b>, texture I/O and single-threaded node init (subdivision, procedurals).`);
+    else add('good',`Machine utilization ${fmtPct(L.util)} during the frame`,`${I.threads?I.threads+' threads':'All threads'} were kept busy for most of the frame.`);
+  }
+  const blocked=L.selfCat.find(x=>/thread blocked|blocked/i.test(x.label));
+  if(blocked && blocked.pct>3) add(blocked.pct>8?'warning':'info',`Thread blocked for ${fmtDur(blocked.v)} (${fmtPct(blocked.pct)})`,'Usually caused by locks in texture loading, procedural expansion or OSL JIT. Pre-converting textures and enabling autotx off helps.');
+  if(L.sceneTime!=null && L.time['scene creation time']?.util!=null && L.sceneTime>5 && L.time['scene creation time'].util<25) add('info',`Scene creation took ${fmtDur(L.sceneTime)} at ${fmtPct(L.time['scene creation time'].util)} utilization`,'Scene loading is mostly single-threaded. Caching USD/procedural loads or using .ass stand-ins can shorten it.');
+  const tex=L.tex;
+  if(tex&&tex.files.length){
+    const bad=tex.files.filter(f=>f.flags.includes('UNTILED')||f.flags.includes('UNMIPMAPPED')||f.flags.includes('NOT .TX'));
+    if(bad.length){ const mb=sum(bad,f=>f.mb); add('warning',`${bad.length} texture${bad.length>1?'s are':' is'} not tiled/mipmapped`,`They read ${fmtMB(mb)} in full and bypass the tile cache: ${bad.slice(0,3).map(f=>`<code>${esc(f.path.split('/').pop())}</code>`).join(', ')}${bad.length>3?'…':''}. Convert with <code>maketx</code> (or enable auto-tx).`); }
+    const red=tex.files.filter(f=>f.redTiles>0);
+    if(red.length) add('warning',`Redundant tile reads on ${red.length} file${red.length>1?'s':''} (${fmtMB(sum(red,f=>f.redMB))})`,`Tiles were evicted and read again, which means the texture cache is too small for this frame. ${I.texMax?`Current limit ${fmtMB(I.texMax)}; `:''}raise <code>texture_max_memory_MB</code>.`);
+    if(tex.io!=null && L.frameTime){ const share=tex.io/((tex.ioThreads||I.threads||1))/L.frameTime*100; if(tex.io/L.frameTime>0.15) add('warning',`Texture file I/O ${fmtDur(tex.io)} summed across threads`,`High I/O relative to the ${fmtDur(L.frameTime)} frame. Check network storage speed and local caching.`); }
+    if(tex.broken && +tex.broken>0) add('critical',`${tex.broken} broken or invalid texture file(s)`,'Arnold rendered those lookups with the default colour.');
+  }
+  if(L.memTree){
+    const P=L.memTree.v;
+    const un=findNode(L.memTree,/^unaccounted/i);
+    if(un && un.v/P>0.25) add('warning',`Unaccounted memory is ${fmtPct(un.v/P*100)} of peak (${fmtMB(un.v)})`,'Often comes from plugins, procedurals, OSL or USD stages kept alive by the host app.');
+    const ud=findNode(L.memTree,/^user ?data/i), geo=findNode(L.memTree,/^geometry/i);
+    if(ud && geo && ud.v/geo.v>0.15) add('info',`User data takes ${fmtMB(ud.v)} (${fmtPct(ud.v/geo.v*100)} of geometry)`,'Primvars and user attributes exported with meshes. Strip the ones no shader reads.');
+    const tc=findNode(L.memTree,/^texture cache/i);
+    if(tc && P) add('info',`Texture cache ${fmtMB(tc.v)} · geometry ${geo?fmtMB(geo.v):'—'} · accel ${fmtMB(findNode(L.memTree,/^accel/i)?.v)}`,`Biggest memory consumers at peak (${fmtMB(P)}).`);
+  }
+  if(L.peakMB && I.ramMB){ const r=L.peakMB/I.ramMB*100; if(r>80) add('critical',`Peak memory ${fmtMB(L.peakMB)} is ${fmtPct(r)} of host RAM`,'Close to swapping or an OOM kill on this machine class.'); else if(r>50) add('warning',`Peak memory is ${fmtPct(r)} of host RAM`,`${fmtMB(L.peakMB)} of ${fmtMB(I.ramMB)}. Two frames per node will not fit.`); }
+  if(L.rays&&L.rays.rows.length){
+    const top=[...L.rays.rows].sort((a,b)=>b.total-a.total)[0]; const T=L.rays.total?.total||sum(L.rays.rows,r=>r.total);
+    if(top&&T&&top.total/T>0.35) add('info',`${top.name} rays are ${fmtPct(top.total/T*100)} of all rays`,top.name.includes('shadow')?`Light sampling dominates${I.lights?` (${esc(I.lights)})`:''}. Check light samples, light count and light filters.`:`Most of the ray budget goes to ${top.name}. Review the matching sample and depth settings.`);
+    const cam=L.rays.rows.find(r=>r.name==='camera');
+    if(cam&&cam.perPixel&&I.aa){ const lo=I.aa*I.aa,hi=(I.aaMax||I.aa)**2; add('info',`Camera samples averaged ${fmtNum(cam.perPixel,1)} per pixel`,`AA ${I.aa}${I.aaMax?`–${I.aaMax}`:''} allows ${lo}${hi!==lo?`–${hi}`:''} per pixel${I.adaptive?`, adaptive threshold ${I.adaptiveThr}`:''}.`); }
+  }
+  const dep=L.warnings.filter(o=>/deprecated/i.test(o.msg));
+  if(dep.length) add('info',`${dep.length} deprecated parameter warning${dep.length>1?'s':''}`,'These keep working today but may break with the next Arnold release.');
+  const disp=L.warnings.filter(o=>/exceeded bounds?|outside (its )?bound/i.test(o.msg));
+  if(disp.length) add('warning',`${disp.length} displacement bound warning${disp.length>1?'s':''}`,'Geometry displaced beyond its bound can be clipped. Raise <code>disp_padding</code> on the affected meshes.');
+  if(L.selfCat.length && L.frameTime){ const s=L.selfCat.find(x=>/subdiv/i.test(x.label)); if(s && s.v/L.frameTime>0.03) add('info',`Subdivision cost ${fmtDur(s.v)}`,`${I.subdiv.length?I.subdiv.length+' subdivided objects logged. ':''}Adaptive subdivision with a larger error, or caching pre-tessellated geo, can cut it.`); }
+  const order={critical:0,warning:1,info:2,good:3}; out.sort((a,b)=>order[a.sev]-order[b.sev]);
+  return out;
+}
+
+/* ============================== sample log ============================== */
+function makeSample(){
+  const P=(n,w)=>String(n).padStart(w,'0');
+  const ts=t=>`${P(Math.floor(t/3600),2)}:${P(Math.floor(t%3600/60),2)}:${P(Math.floor(t%60),2)}`;
+  const out=[]; const L=(t,mem,msg,lv='')=>out.push(`${ts(t)} ${(mem+'MB').padStart(8)} ${lv.padEnd(7)} | ${msg}`);
+  const fd=s=>{ const m=Math.floor(s/60),r=s-m*60; return `${m}:${r.toFixed(2).padStart(5,'0')}`; };
+  const R='/proj/renders/sq040/sh0210/lgt/v047';
+  L(0,112,'log started Fri Oct 09 14:02:11 2026');
+  L(0,112,'Arnold 7.3.5.0 [5b2a1c9e] linux x86_64 clang-15.0.7 oiio-2.5.12 osl-1.13.10 vdb-11.0.0 adlsdk-7.4.2.47 clmhub-3.1.1.43 rlm-15.2.5 optix-6.6.0 2026/07/14 09:12:33');
+  L(0,112,'running on rf-node-0417, pid=48211');
+  L(0,112,' 2 x AMD EPYC 7763 64-Core Processor (128 cores, 256 logical) with 515702MB');
+  L(0,112,' NVIDIA driver version 550.54.15 (Optix 80000)');
+  L(0,112,' GPU 0: NVIDIA RTX A6000 @ 1800MHz (compute 8.6) with 48676MB (47912MB available) (NVLink:0)');
+  L(0,112,' Rocky Linux 9.3 (Blue Onyx), Linux kernel 5.14.0-362.8.1.el9_3.x86_64');
+  L(0,112,' soft limit for open files raised from 1024 to 65536');
+  L(0,112,'');
+  L(0,112,'[license] checking out 1 Arnold license from 5053@lic01.studio.local ... ok (rlm)');
+  L(0,112,'loading plugins from /opt/htoa/htoa-6.3.5.0/scripts/bin/../plugins ...');
+  L(0,118,'loading plugins from /studio/pipeline/arnold/plugins ...');
+  L(1,146,' cryptomatte.so: cryptomatte uses Arnold 7.3.5.0');
+  L(1,146,' cryptomatte.so: cryptomatte_filter uses Arnold 7.3.5.0');
+  L(1,146,' cryptomatte.so: cryptomatte_manifest_driver uses Arnold 7.3.5.0');
+  L(1,147,' lgt_aov_utils.so: lgt_aov_write_layer uses Arnold 7.3.5.0');
+  L(1,147,' lgt_aov_utils.so: lgt_light_group_mask uses Arnold 7.3.5.0');
+  L(1,151,'loaded 9 plugins from 4 lib(s) in 0:00.82');
+  L(1,151,'[htoa] HtoA 6.3.5.0 Houdini 20.5.332');
+  L(1,153,'[color_manager] using OCIO config /studio/config/ocio/aces_1.3/studio-config-v2.1.0_aces-v1.3_ocio-v2.3.ocio');
+  L(1,153,'[color_manager] rendering color space is "ACEScg"');
+  L(2,158,'[kick] reading scene from /proj/shots/sq040/sh0210/usd/sh0210_lgt_v047.usda');
+  L(9,3412,'[usd] loaded 18 layers, 14532 prims in 0:07.21');
+  ['rockA','rockB','rockC'].forEach(r=>L(9,3412,`[usd] /World/env/cliffs/${r}_GEO: primvar "displacementBound" has unsupported type, ignoring`,'WARNING'));
+  L(10,3420,'[htoa] parameter "aov_shaders" on options is deprecated, use the render settings AOV list instead','WARNING');
+  L(10,3420,'node "/World/chars/hero/body_GEO" parameter "smoothing" is deprecated and may be removed in the future','WARNING');
+  L(10,3421,'');
+  L(10,3421,'[kick] applying 14 attr. overrides');
+  L(10,3421,'rendering image at 2048 x 858, 4 AA samples');
+  L(10,3421,' AA samples max         8');
+  L(10,3421,' AA sample clamp        10');
+  L(10,3421,' diffuse         samples 3 / depth 2');
+  L(10,3421,' specular        samples 2 / depth 2');
+  L(10,3421,' transmission    samples 3 / depth 8');
+  L(10,3421,' volume indirect samples 2 / depth 1');
+  L(10,3421,' sss             samples 2');
+  L(10,3421,' total           depth 10');
+  L(10,3421,' transparency    depth 16');
+  L(10,3421,' adaptive sampling on, threshold 0.015');
+  L(10,3421,'using 256 threads, render device: CPU');
+  L(10,3422,`[aov] registered driver: "beauty" (driver_exr) -> ${R}/beauty/sh0210_lgt_v047.1042.exr`);
+  [['RGBA','RGBA',1],['diffuse','RGB'],['specular','RGB'],['transmission','RGB'],['sss','RGB'],['emission','RGB'],['indirect','RGB'],['Z','FLOAT',0,'closest_filter'],['N','VECTOR',0,'closest_filter'],['P','VECTOR',0,'closest_filter'],['motionvector','RGB',0,'closest_filter']]
+    .forEach(([n,t,_,f])=>L(10,3423,`[aov]  * "${n}" of type ${t} filtered by "${f||'gaussian_filter'}"`));
+  L(10,3424,`[aov] registered driver: "crypto" (cryptomatte_manifest_driver) -> ${R}/crypto/sh0210_lgt_v047.1042.exr`);
+  ['crypto_object','crypto_material','crypto_asset'].forEach(n=>L(10,3424,`[aov]  * "${n}" of type FLOAT filtered by "cryptomatte_filter"`));
+  L(10,3424,'[aov] done preparing 14 AOVs for 2 outputs to 2 drivers (0 deep AOVs)');
+  L(10,3430,'initializing 18744 nodes ...');
+  L(12,3880,'[subdiv] /World/chars/hero/body_GEO: catclark, 3 iterations (adaptive, error 0.5px)');
+  L(15,6210,'[subdiv] /World/env/cliffs/rockA_GEO: catclark, 4 iterations (adaptive), displacement height 2.5');
+  L(17,8740,'[disp] /World/env/cliffs/rockA_GEO: displacement exceeded bounds (max 2.83 > bound 2.50), clipping may occur','WARNING');
+  L(19,10120,'[subdiv] /World/env/cliffs/rockB_GEO: catclark, 4 iterations (adaptive), displacement height 2.5');
+  L(21,10932,'[subdiv] /World/env/water/ocean_GEO: linear, 2 iterations');
+  L(22,11250,'node initialization done in 0:11.84 (multithreaded)');
+  L(22,11250,'updating 18891 nodes ...');
+  L(22,11251,'[lights] 37 lights, 2 light groups, 1 skydome (importance map 1024x512)');
+  L(24,11980,'scene bounds: (-842.31 -12.07 -1903.44) -> (911.88 488.12 402.67)');
+  L(24,11980,'node update done in 0:01.91 (multithreaded)');
+  L(25,12200,'[accel] bvh4 done - 0:03.02 (wall time) - 41213 prims, 1 key');
+  L(28,13340,'[accel] procedural/instancing bvh done - 0:04.11 (48211 instances)');
+  L(28,13340,'[texture] texture cache max memory 4096MB, autotx off, max open files 2048');
+  L(28,13342,'[texture] /proj/assets/hdri/cove_sunset_8k.exr is not tiled and not mipmapped, use maketx to convert it (performance may be degraded)','WARNING');
+  L(28,13342,'[texture] /proj/ref/lookdev_ref_cardA.jpg is not tiled and not mipmapped, use maketx to convert it (performance may be degraded)','WARNING');
+  L(29,13390,'[skydome_light] /World/lgt/env_dome: importance map 1024x512 built in 0:00.43');
+  L(29,13390,'starting render with 256 threads, 64x64 buckets');
+  for(let p=0;p<=100;p+=5){ const g=p/100-0.06*Math.sin(2*Math.PI*p/100); const t=29+252*g; const rpp=Math.round(4+1427*Math.pow(p/100,1.05)); const mem=Math.round(13390+7050*(1-Math.exp(-p/18))); L(t,mem,`${String(p).padStart(5)}% done - ${rpp} rays/pixel`); }
+  L(281,20440,'render done in 4:12.37');
+  L(281,20442,`[driver_exr] writing file \`${R}/beauty/sh0210_lgt_v047.1042.exr'`);
+  L(283,20442,`[driver_exr] writing file \`${R}/crypto/sh0210_lgt_v047.1042.exr'`);
+  L(284,20442,'render done');
+  const S=(msg)=>L(284,20442,msg), HR=()=>S('-'.repeat(83));
+  const row=(label,val,ind=2,w=57)=>S(' '.repeat(ind)+label.padEnd(w-ind)+val);
+  HR(); row('scene creation time',`${fd(9.96)} machine utilization (6.31%)`,0);
+  row('plugin loading',fd(0.82)); row('scene loading (usd)',fd(7.21)); row('system/unaccounted',fd(1.93));
+  HR(); row('frame time',`${fd(274.20)} machine utilization (91.40%)`,0);
+  row('node init',fd(13.75)); row('subdivision',fd(7.92),4); row('displacement',fd(2.88),4); row('accel. building',fd(1.96),4);
+  row('driver init/close',fd(2.61)); row('rendering',fd(252.37)); row('pixel rendering',fd(249.80),4); row('importance maps',fd(0.43),4);
+  row('system/unaccounted',fd(5.47));
+  HR(); S('top session self-times by category');
+  [['standard_surface (shader)',81.40],['BVH traversal',48.12],['skydome_light (light)',31.77],['image (shader)',29.05],['quad_light (light)',17.62],['thread blocked',12.08],['OSL shading',9.77],['polymesh:subdivide',7.92],['USD procedural',7.21],['aov_write_rgb (shader)',6.31],['polymesh:displace',2.88],['driver_exr (driver)',2.61],['Plugin loader',0.82]]
+    .forEach(([n,v])=>row(n,`${fd(v)} (${(v/284.16*100).toFixed(2).padStart(6)}%)`));
+  HR(); S('top session self-times by node');
+  [['/World/chars/hero/skin_MTL (standard_surface)',41.10],['/World/lgt/env_dome (skydome_light)',31.77],['/World/env/cliffs/rock_MTL (standard_surface)',22.84],['/World/env/water/water_MTL (standard_surface)',17.46],['/World/lgt/key_rect (quad_light)',11.32],['/World/env/cliffs/rockA_GEO (polymesh)',6.71],['/World/lgt/rim_rect (quad_light)',6.30],['/World/chars/hero/hair_MTL (standard_hair)',5.92],['/World/env/cliffs/rockB_GEO (polymesh)',4.09]]
+    .forEach(([n,v])=>row(n,`${fd(v)} (${(v/284.16*100).toFixed(2).padStart(6)}%)`,2,64));
+  HR(); row('peak CPU memory used','20442.11MB',0);
+  const mm=[['at startup',108.21],['plugins',42.90],['AOV samples',412.33],['output buffers',220.40],['framebuffers',168.12],['node overhead',18.66],['message passing',0.55],['memory pools',1104.27],['geometry',9873.44,[['polymesh',9201.03,[['vertices',2450.12],['vertex indices',1102.88],['packed normals',612.40],['normal indices',551.44],['uv coords',820.11],['uv coords idxs',551.44],['uniform indices',98.20],['userdata',3014.44]]],['curves',538.77],['instances',133.64]]],['accel. structs',2190.57],['skydome importance map',8.00],['strings',62.70],['texture cache',4120.33],['unaccounted',2111.63]];
+  const wm=(arr,ind)=>arr.forEach(([n,v,k])=>{ row(n,v.toFixed(2).padStart(9)+'MB',ind); if(k) wm(k,ind+2); }); wm(mm,2);
+  const px=2048*858, cps=22.37;
+  HR(); S('ray counts                       (       /pixel,      /sample) (% total) (avg. hits) (max hits)');
+  const rays=[['camera',22.37,0.97,1],['shadow',611.20,0.31,1],['diffuse_reflect',298.44,0.88,1],['diffuse_transmit',6.12,0.92,1],['specular_reflect',141.90,0.79,1],['specular_transmit',214.36,0.96,1],['volume_scattering',9.81,0.42,1],['subsurface',126.80,1.00,1]];
+  const totR=rays.reduce((a,r)=>a+r[1],0);
+  const rr=(n,pp,ah,mh)=>S(`  ${n.padEnd(20)}${String(Math.round(pp*px)).padStart(12)} (${pp.toFixed(2).padStart(12)}, ${(pp/cps).toFixed(2).padStart(12)}) (${(pp/totR*100).toFixed(2).padStart(6)}%) (${ah.toFixed(2).padStart(9)}) (${String(mh).padStart(8)})`);
+  rays.forEach(r=>rr(...r)); rr('total',totR,0.58,10);
+  S('  by ray depth:            0          1          2          3          4          5');
+  [['total',[41.2,33.9,14.8,6.3,2.6,1.2]],['shadow',[44.0,32.1,14.2,6.1,2.5,1.1]],['diffuse',[0,61.3,25.4,9.2,3.1,1.0]],['specular',[0,52.4,27.8,11.9,5.4,2.5]]]
+    .forEach(([n,v])=>S('   '+n.padEnd(18)+v.map(x=>(x.toFixed(1)+'%').padStart(11)).join('')));
+  HR(); S('shader calls                     (       /pixel,      /sample) (% total)');
+  const sh=[['primary',31.02],['transparent_shadow',188.40],['autobump',12.30],['background',1.88],['importance',0.51]]; const totS=sh.reduce((a,r)=>a+r[1],0);
+  const sr=(n,pp)=>S(`  ${n.padEnd(20)}${String(Math.round(pp*px)).padStart(12)} (${pp.toFixed(2).padStart(12)}, ${(pp/cps).toFixed(2).padStart(12)}) (${(pp/totS*100).toFixed(2).padStart(6)}%)`);
+  sh.forEach(r=>sr(...r)); sr('total',totS);
+  HR(); S('geometry                                 (   objects) (  subdivs)');
+  [['lists',3],['polymeshes',1214,41],['curves',6],['instances',48211],['procedurals',18],['volumes',2]].forEach(([n,a,b])=>S('  '+n.padEnd(39)+`(${String(a).padStart(10)})`+(b!=null?` (${String(b).padStart(9)})`:'')));
+  HR(); S('geometric elements:                      (   objects) (      min) (      avg.) (       max)');
+  [['polygons',1214,6,18240,2103344],['curve segments',6,10221,402114,1803221],['volume voxels',2,1048576,6291456,11534336]].forEach(([n,...v])=>S('  '+n.padEnd(39)+v.map((x,i)=>`(${String(x).padStart([10,9,10,11][i])})`).join(' ')));
+  HR(); S('triangle tessellation:                   (   objects) (      min) (      avg.) (       max) (     total)');
+  [['unique triangles',1214,12,88410,31204410,107329740],['subdivided triangles',41,40320,1540110,31204410,63144510],['instanced triangles',48211,12,42116,880420,2030473276]].forEach(([n,...v])=>S('  '+n.padEnd(39)+v.map((x,i)=>`(${String(x).padStart([10,9,10,11,10][i])})`).join(' ')));
+  HR(); S('OpenImageIO Texture statistics');
+  S('  Options:  gray_to_rgb=1 flip_t=0 max_tile_channels=6 max_mip_res=1073741824');
+  S('  Queries/batches : '); S('    texture     :  412088144 queries in 103022036 batches'); S('    texture 3d  :  0 queries in 0 batches'); S('    shadow      :  0 queries in 0 batches'); S('    environment :  0 queries in 0 batches'); S('    gettextureinfo :  88412 queries');
+  S('  Interpolations :'); S('    closest  : 1201330'); S('    bilinear : 98411002'); S('    bicubic  : 312475812');
+  S('  Average anisotropic probes : 1.84'); S('  Max anisotropy in the wild : 512');
+  S('OpenImageIO ImageCache statistics (shared) ver 2.5.12');
+  S('  Options:  max_memory_MB=4096.0 max_open_files=2048 autotile=0 autoscanline=1 automip=0 forcefloat=0');
+  S('  Images : 10 unique'); S('    ImageInputs : 10 created, 8 current, 10 peak');
+  S('    Total pixel data size of all images referenced : 2.6 GB'); S('    Total actual file size of all images referenced : 1.9 GB');
+  S('    Pixel data read : 1.1 GB'); S('    Redundant reads: 64 tiles, 4.0 MB');
+  S('    File I/O time : 6.1s (0.0s average per thread, for 256 threads)'); S('    File open time only : 0.4s');
+  S('  Tiles: 9616 created, 8102 current, 9480 peak'); S('    total tile requests : 103022036'); S('    micro-cache misses : 3104211 (3.01313%)'); S('    main cache misses : 9616 (0.00933393%)'); S('    redundant reads: 64 tiles, 4.0 MB'); S('    Peak cache memory : 4.0 GB');
+  S('  Image file statistics:'); S('        opens   tiles    MB read   --redundant--   I/O time  res                File');
+  const A='/proj/assets';
+  [[1,1,1820,113.8,0,0,0.41,'4096x4096x3.u8',`${A}/hero/tex/hero_skin_diff.1001.tx`],[2,1,940,19.6,0,0,0.12,'4096x4096x1.u8',`${A}/hero/tex/hero_skin_spec_rough.1001.tx`],[3,1,1204,50.2,0,0,0.31,'4096x4096x1.f16',`${A}/hero/tex/hero_skin_disp.1001.tx`],[4,1,3110,194.4,0,0,0.77,'8192x8192x3.u8',`${A}/cliffs/tex/rock_diff.1001.tx`],[5,1,2860,178.8,64,4.0,1.21,'8192x8192x1.f32',`${A}/cliffs/tex/rock_disp.1001.tx`],[6,1,1120,70.0,0,0,0.29,'4096x4096x3.u8',`${A}/cliffs/tex/rock_normal.1001.tx`],[7,1,210,4.4,0,0,0.03,'2048x2048x1.u8',`${A}/water/tex/water_foam_mask.tx`],[8,1,1,512.0,0,0,2.84,'8192x4096x4.f32',`${A}/hdri/cove_sunset_8k.exr`,'UNTILED UNMIPMAPPED'],[9,1,1,17.2,0,0,0.09,'3000x2000x3.u8','/proj/ref/lookdev_ref_cardA.jpg','UNTILED UNMIPMAPPED'],[10,1,180,3.8,0,0,0.02,'2048x2048x1.u8',`${A}/cliffs/tex/moss_mask.1001.tx`]]
+    .forEach(([i,o,t,mb,rt,rm,io,res,f,fl])=>S(`  ${String(i).padStart(4)} ${String(o).padStart(5)} ${String(t).padStart(7)} ${mb.toFixed(1).padStart(9)}  ${rt?String(rt).padStart(6)+' '+rm.toFixed(1).padStart(7):' '.repeat(14)}  ${(io.toFixed(2)+'s').padStart(9)}  ${res.padEnd(17)} ${f}  ${fl||'MIP-COUNT [...]'}`));
+  S('  Tot:     10   9616   1164.2       64     4.0      6.1s'); S('  Broken or invalid files: 0');
+  HR(); S('number of warnings, warning type:');
+  S('          3: [usd] %s: primvar "displacementBound" has unsupported type, ignoring');
+  S('          2: [texture] %s is not tiled and not mipmapped, use maketx to convert it (performance may be degraded)');
+  S('          1: [htoa] parameter "aov_shaders" on options is deprecated, use the render settings AOV list instead');
+  S('          1: node "%s" parameter "smoothing" is deprecated and may be removed in the future');
+  S('          1: [disp] %s: displacement exceeded bounds (max %f > bound %f), clipping may occur');
+  HR();
+  L(285,20442,'releasing resources');
+  L(286,1204,'Arnold shutdown');
+  return out.join('\n');
+}
+
+/* PARSER_END */
+</script>
+<script>
+/* ============================== UI ============================== */
+const state={logs:[],active:0,tab:'overview',lf:{q:'',lvl:'all',tag:'all',stats:true}};
+try{ const t=localStorage.getItem('ali.tab'); if(t) state.tab=t; }catch(e){}
+const TABS=[['overview','Overview'],['time','Time'],['memory','Memory'],['rays','Rays & Shading'],['textures','Textures'],['geometry','Geometry'],['warnings','Warnings'],['system','System'],['log','Log'],['sequence','Compare']];
+
+function cur(){ return state.logs[state.active]; }
+function toast(msg){ const d=document.createElement('div'); d.className='toast'; d.textContent=msg; document.body.appendChild(d); setTimeout(()=>d.remove(),4200); }
+
+/* ---------- chart primitives ---------- */
+function collapse(items,max=7){ items=items.filter(i=>i.v>0).sort((a,b)=>b.v-a.v); if(items.length<=max) return items; const keep=items.slice(0,max-1); const rest=items.slice(max-1); keep.push({label:`Other (${rest.length})`,v:sum(rest,r=>r.v),fmt:null,other:true}); return keep; }
+function donutBlock(items,{center,sub,fmt,max=7}={}){
+  items=collapse(items,max); const tot=sum(items,i=>i.v)||1;
+  items.forEach((it,i)=>{ it.c=it.other?OTHER:COL[i%COL.length]; it.f=fmt(it.v); });
+  const R=68,W=22,C=2*Math.PI*R; let acc=0;
+  const segs=items.map(it=>{ const len=it.v/tot*C; const gap=items.length>1?Math.min(1.6,len*.4):0; const s=`<circle r="${R}" cx="90" cy="90" fill="none" style="stroke:${it.c}" stroke-width="${W}" stroke-dasharray="${Math.max(len-gap,0.01)} ${C}" stroke-dashoffset="${-acc}" transform="rotate(-90 90 90)"><title>${esc(it.label)}: ${esc(it.f)} (${(it.v/tot*100).toFixed(1)}%)</title></circle>`; acc+=len; return s; }).join('');
+  const svg=`<svg viewBox="0 0 180 180" class="donut" role="img" aria-label="${esc(sub)}"><circle r="${R}" cx="90" cy="90" fill="none" style="stroke:var(--track)" stroke-width="${W}"/>${segs}<text x="90" y="92" text-anchor="middle" class="dc">${esc(center)}</text><text x="90" y="110" text-anchor="middle" class="ds">${esc(sub)}</text></svg>`;
+  const lg=`<ul class="legend">${items.map(it=>`<li><i style="background:${it.c}"></i><span class="ll" title="${esc(it.label)}">${esc(it.label)}</span><span class="lv">${esc(it.f)}</span><span class="lp">${(it.v/tot*100).toFixed(1)}%</span></li>`).join('')}</ul>`;
+  return `<div class="dl">${svg}${lg}</div>`;
+}
+function niceStep(range,n=4){ const raw=range/n; const p=Math.pow(10,Math.floor(Math.log10(raw||1))); const f=raw/p; return (f<1.5?1:f<3?2:f<7?5:10)*p; }
+function lineChart(series,o={}){
+  const W=720,H=o.h||220,ml=o.ml||58,mr=18,mt=16,mb=28;
+  const pts=series.flatMap(s=>s.pts); if(pts.length<2) return '<div class="empty">Not enough timestamped lines to draw this chart.</div>';
+  let xmin=o.xMin??Math.min(...pts.map(p=>p[0])),xmax=Math.max(...pts.map(p=>p[0])); if(xmax===xmin) xmax=xmin+1;
+  const ymin=o.yMin??0; let ymax=Math.max(...pts.map(p=>p[1]));
+  const ys=niceStep(ymax-ymin); ymax=Math.ceil(ymax/ys)*ys||ys;
+  const xs=niceStep(xmax-xmin,6);
+  const X=x=>ml+(x-xmin)/(xmax-xmin)*(W-ml-mr), Y=y=>mt+(1-(y-ymin)/(ymax-ymin))*(H-mt-mb);
+  let g='<g class="grid">';
+  for(let y=ymin;y<=ymax+1e-9;y+=ys){ g+=`<line x1="${ml}" x2="${W-mr}" y1="${Y(y)}" y2="${Y(y)}"/><text x="${ml-8}" y="${Y(y)+3.5}" text-anchor="end">${esc((o.yFmt||String)(y))}</text>`; }
+  for(let x=Math.ceil(xmin/xs)*xs;x<=xmax+1e-9;x+=xs){ g+=`<text x="${X(x)}" y="${H-8}" text-anchor="middle">${esc((o.xFmt||String)(x))}</text>`; }
+  g+='</g>';
+  let mk='';
+  (o.marks||[]).forEach(m=>{ if(m.x<xmin||m.x>xmax) return; mk+=`<g class="mk"><line x1="${X(m.x)}" x2="${X(m.x)}" y1="${mt}" y2="${H-mb}"/><text x="${X(m.x)+4}" y="${mt+10}">${esc(m.label)}</text></g>`; });
+  const paths=series.map(s=>{
+    const p=s.pts.map(q=>`${X(q[0]).toFixed(1)},${Y(q[1]).toFixed(1)}`);
+    const line=`M${p.join('L')}`; const last=s.pts[s.pts.length-1];
+    const area=s.area?`<path d="${line}L${X(last[0]).toFixed(1)},${Y(ymin)}L${X(s.pts[0][0]).toFixed(1)},${Y(ymin)}Z" style="fill:${s.color};opacity:.14"/>`:'';
+    return `${area}<path d="${line}" fill="none" style="stroke:${s.color}" stroke-width="2" stroke-linejoin="round"/><circle cx="${X(last[0])}" cy="${Y(last[1])}" r="3.5" style="fill:${s.color}"/>`;
+  }).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label||'chart')}">${g}${mk}${paths}</svg>`;
+}
+function bars(items,{fmt,max,color='var(--c1)',sub}={}){
+  if(!items.length) return '<div class="empty">No data in this log.</div>';
+  const M=max||Math.max(...items.map(i=>i.v))||1;
+  return `<div class="bars">${items.map((it,i)=>`<div class="br"><span class="bl" title="${esc(it.label)}">${esc(it.label)}${it.sub?` <em>${esc(it.sub)}</em>`:''}</span><span class="bt"><b style="width:${(it.v/M*100).toFixed(2)}%;background:${it.c||color}"></b></span><span class="bv">${esc(fmt(it.v,it))}</span></div>`).join('')}</div>`;
+}
+function treeView(root,fmt,{showUtil}={}){
+  if(!root) return '<div class="empty">This section was not found in the log. Render with stats enabled (verbosity ≥ 2 / log level "info" with stats).</div>';
+  const tot=root.v||1, rows=[];
+  const walk=(n,d,parent)=>{
+    rows.push(`<div class="tr ${d===0?'root':''} d${Math.min(d,3)}" style="--d:${d}"><span class="tl" title="${esc(n.label)}">${esc(n.label)}${showUtil&&n.util!=null?`<span class="ut">${fmtPct(n.util)} util.</span>`:''}</span><span class="tb"><b style="width:${(n.v/tot*100).toFixed(2)}%"></b></span><span class="tv">${fmt(n.v)}</span><span class="tp">${parent?fmtPct(n.v/(parent.v||1)*100):'100%'}</span></div>`);
+    n.children.forEach(c=>walk(c,d+1,n));
+    if(n.children.length){ const rem=n.v-sum(n.children,c=>c.v); if(rem>n.v*0.01) rows.push(`<div class="tr rem d${Math.min(d+1,3)}" style="--d:${d+1}"><span class="tl">not itemized</span><span class="tb"><b style="width:${(rem/tot*100).toFixed(2)}%"></b></span><span class="tv">${fmt(rem)}</span><span class="tp">${fmtPct(rem/(n.v||1)*100)}</span></div>`); }
+  };
+  walk(root,0,null);
+  return `<div class="tree">${rows.join('')}</div>`;
+}
+let TB={},tbN=0;
+function stable(cols,rows,{sort,dir=-1,total}={}){ const id='tb'+(++tbN); TB[id]={cols,rows,sort,dir,total}; return `<div class="tw" id="${id}">${renderTable(id)}</div>`; }
+function renderTable(id){
+  const t=TB[id]; let rows=[...t.rows];
+  if(t.sort){ const c=t.cols.find(c=>c.k===t.sort); const gv=c.sv||(r=>r[c.k]); rows.sort((a,b)=>{ const x=gv(a),y=gv(b); return (typeof x==='string'?x.localeCompare(y):(x??-Infinity)-(y??-Infinity))*t.dir; }); }
+  const th=t.cols.map(c=>`<th class="${c.n?'n':''}" ${c.nosort?'':`data-t="${id}" data-k="${c.k}"`} scope="col">${esc(c.label)}${t.sort===c.k?` <span class="ar">${t.dir<0?'↓':'↑'}</span>`:''}</th>`).join('');
+  const td=r=>t.cols.map(c=>`<td class="${c.n?'n':''} ${c.cls||''}">${c.f?c.f(r[c.k],r):esc(r[c.k])}</td>`).join('');
+  return `<table class="tbl"><thead><tr>${th}</tr></thead><tbody>${rows.map(r=>`<tr>${td(r)}</tr>`).join('')}${t.total?`<tr class="tot">${td(t.total)}</tr>`:''}</tbody></table>`;
+}
+document.addEventListener('click',e=>{ const th=e.target.closest('th[data-t]'); if(!th) return; const t=TB[th.dataset.t]; if(!t) return; const k=th.dataset.k; if(t.sort===k) t.dir*=-1; else { t.sort=k; t.dir=-1; } document.getElementById(th.dataset.t).innerHTML=renderTable(th.dataset.t); });
+const kv=pairs=>`<dl class="kv">${pairs.filter(p=>p[1]!=null&&p[1]!==''&&!(Array.isArray(p[1])&&!p[1].length)).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')||'<dt>—</dt><dd class="muted">Not in this log</dd>'}</dl>`;
+const panel=(cls,title,body,sub)=>`<section class="panel ${cls}"><h2>${title}${sub?` <small>${sub}</small>`:''}</h2>${body}</section>`;
+
+/* ---------- views ---------- */
+function headerStrip(L){
+  const I=L.info; let st;
+  if(L.errors.length||I.crash) st=`<span class="status bad">● ${L.errors.length?L.errors.length+' error'+(L.errors.length>1?'s':''):'crash'}</span>`;
+  else if(L.kind!=='log') st=`<span class="status mid">● ${L.kind==='profile'?'profile JSON':'stats JSON'}</span>`;
+  else if(I.renderDone||L.time['frame time']) st=`<span class="status ok">● render complete</span>`;
+  else st=`<span class="status mid">● incomplete</span>`;
+  return `<div class="strip"><div class="fn">${esc(L.name)}</div>${st}<div class="meta">${I.host?`<span>host <b>${esc(I.host)}</b></span>`:''}${I.version?`<span>Arnold <b>${esc(I.version)}</b></span>`:''}${I.dcc?`<span><b>${esc(I.dcc)}</b> ${esc(I.host_app||'')}</span>`:''}${I.started?`<span>${esc(I.started)}</span>`:''}</div></div>`;
+}
+function vOverview(L){
+  const I=L.info, T=L.rays?.total;
+  const res=I.w?`${I.w}×${I.h}`:'—';
+  const issues=`${L.errors.length} / ${L.warnings.length}`;
+  const k=[
+    {k:'Frame time',v:fmtDur(L.frameTime),s:I.renderDone?`pixels ${fmtDur(I.renderDone)}`:(L.sceneTime!=null?`scene ${fmtDur(L.sceneTime)}`:'')},
+    {k:'Peak memory',v:fmtMB(L.peakMB),s:I.ramMB&&L.peakMB?`${fmtPct(L.peakMB/I.ramMB*100)} of ${fmtMB(I.ramMB)} RAM`:''},
+    {k:'Resolution',v:res,s:I.aa?`AA ${I.aa}${I.aaMax?'–'+I.aaMax:''}${I.w?' · '+(I.w*I.h/1e6).toFixed(2)+' MP':''}`:''},
+    {k:'Rays / pixel',v:T?.perPixel!=null?fmtInt(T.perPixel):(L.progress.length?fmtInt(L.progress[L.progress.length-1].rpp):'—'),s:T?.total?`${(T.total/1e9).toFixed(2)} B rays total`:''},
+    {k:'Utilization',v:L.util!=null?fmtPct(L.util):'—',s:I.threads?`${I.threads} threads · ${I.device||'CPU'}`:''},
+    {k:'Errors / warnings',v:issues,s:`${L.uniqueWarnings.length} unique warning types`,cls:L.errors.length?'err':(L.warnings.length?'warn':'')},
+  ];
+  let h=headerStrip(L)+`<div class="kpis">${k.map(x=>`<div class="kpi ${x.cls||''}"><div class="k">${x.k}</div><div class="v" title="${esc(x.v)}">${esc(x.v)}</div><div class="s">${esc(x.s||' ')}</div></div>`).join('')}</div>`;
+  h+='<div class="grid" style="margin-top:16px">';
+  h+=panel('s7','Findings',L.insights.length?`<ul class="ins">${L.insights.map(i=>`<li><span class="sev ${i.sev}">${i.sev}</span><div><div class="t">${esc(i.t)}</div><div class="d">${i.d}</div></div></li>`).join('')}</ul>`:'<div class="empty">Nothing stands out in this log.</div>',`${L.insights.length} checks triggered`);
+  h+=panel('s5','Wall-clock phases',phaseBlock(L)+`<h3>Render settings</h3>`+kv([['Camera AA',I.aa!=null?`${I.aa}${I.aaMax?` (max ${I.aaMax})`:''}${I.clamp?` · clamp ${I.clamp}`:''}`:null],['Adaptive',I.adaptive!=null?(I.adaptive?`on · threshold ${I.adaptiveThr??'—'}`:'off'):null],...I.samples.map(s=>[s.type,`${s.samples} samples${s.depth!=null?` · depth ${s.depth}`:''}`]),['Depth',I.totalDepth!=null?`total ${I.totalDepth}${I.transpDepth!=null?` · transparency ${I.transpDepth}`:''}`:null],['Color space',I.colorspace?esc(I.colorspace):null]]),'from log timestamps');
+  const ft=L.time['frame time']||L.time['render time'];
+  h+=panel('s4','Frame time',ft?donutBlock(ft.children.map(c=>({label:c.label,v:c.v})),{center:fmtDur(ft.v),sub:'frame',fmt:fmtDur}):(L.selfCat.length?donutBlock(L.selfCat.map(c=>({label:c.label,v:c.v})),{center:fmtDur(sum(L.selfCat,c=>c.v)),sub:'self time',fmt:fmtDur}):'<div class="empty">No timing stats in this log.</div>'));
+  h+=panel('s4','Peak memory',L.memTree?donutBlock(L.memTree.children.map(c=>({label:c.label,v:c.v})),{center:fmtMB(L.memTree.v),sub:'peak',fmt:fmtMB}):'<div class="empty">No memory stats in this log.</div>');
+  h+=panel('s4','Rays by type',L.rays?donutBlock(L.rays.rows.map(r=>({label:r.name,v:r.total})),{center:T?.perPixel!=null?fmtInt(T.perPixel):'',sub:'rays / px',fmt:v=>(v/1e6).toFixed(1)+'M'}):'<div class="empty">No ray stats in this log.</div>');
+  h+=panel('s6','Render progress',L.progress.length>1?lineChart([{pts:L.progress.map(p=>[p.t,p.pct]),color:'var(--c1)',area:true}],{yFmt:v=>v+'%',xFmt:fmtClock,label:'percent done over time',xMin:L.progress[0].t}):'<div class="empty">No progress lines found.</div>',L.progress.length>1?`${fmtDur(L.progress[L.progress.length-1].t-L.progress[0].t)} from first to last bucket`:'');
+  h+=panel('s6','Memory over time',memChart(L),'resident memory column of every log line');
+  return h+'</div>';
+}
+function phaseBlock(L){
+  if(!L.phases.length) return '<div class="empty">Log has no timestamps.</div>';
+  const tot=sum(L.phases,p=>p.d)||1;
+  return `<div class="phase" role="img" aria-label="phases">${L.phases.map((p,i)=>`<span style="flex:${Math.max(p.d,tot*0.004)};background:${COL[i%COL.length]}" title="${esc(p.label)}: ${fmtDur(p.d)}"></span>`).join('')}</div><div class="plg">${L.phases.map((p,i)=>`<span><i style="background:${COL[i%COL.length]}"></i>${esc(p.label)} <b>${fmtDur(p.d)}</b></span>`).join('')}</div>`;
+}
+function memChart(L,h){
+  if(L.memSeries.length<2) return '<div class="empty">No memory column in this log.</div>';
+  // thin to ~600 points keeping maxima
+  let pts=L.memSeries; if(pts.length>600){ const step=Math.ceil(pts.length/600),o=[]; for(let i=0;i<pts.length;i+=step){ const ch=pts.slice(i,i+step); o.push(ch.reduce((a,b)=>b[1]>a[1]?b:a)); } pts=o; }
+  const marks=[]; if(L._tRender!=null) marks.push({x:L._tRender,label:'render'}); if(L._tInit!=null) marks.push({x:L._tInit,label:'init'});
+  return lineChart([{pts,color:'var(--c2)',area:true}],{yFmt:v=>v>=1024?(v/1024).toFixed(v%1024?1:0)+'G':v+'M',xFmt:fmtClock,marks,h,label:'memory over time',xMin:pts[0][0]});
+}
+function vTime(L){
+  const sc=L.time['scene creation time'], ft=L.time['frame time']||L.time['render time'];
+  let h=headerStrip(L)+'<div class="grid">';
+  h+=panel('s6','Frame time breakdown',treeView(ft,fmtDur,{showUtil:true}));
+  h+=panel('s6','Scene creation',treeView(sc,fmtDur,{showUtil:true})+`<h3>Wall-clock phases</h3>`+phaseBlock(L));
+  const sTot=L.selfCat.length&&L.selfCat[0].pct?L.selfCat[0].v/(L.selfCat[0].pct/100):sum(L.selfCat,c=>c.v);
+  h+=panel('s6','Self time by category',L.selfCat.length?donutBlock(L.selfCat.map(c=>({label:c.label,v:c.v})),{center:fmtDur(sTot),sub:'session',fmt:fmtDur,max:8}):'<div class="empty">Not in this log. Enable profiling stats to get self-times.</div>');
+  h+=panel('s6','Self time by node',bars(L.selfNode.slice(0,25).map((c,i)=>{ const m=c.label.match(/^(.*?)\s*\(([^)]+)\)$/); return {label:m?m[1]:c.label,sub:m?m[2]:'',v:c.v,c:COL[i%COL.length]}; }),{fmt:(v,it)=>fmtDur(v)}),L.selfNode.length?`top ${Math.min(25,L.selfNode.length)} nodes`:'');
+  if(L.progress.length>1){
+    const sp=[]; for(let i=1;i<L.progress.length;i++){ const a=L.progress[i-1],b=L.progress[i]; const dt=b.t-a.t; if(dt>0) sp.push([b.t,(b.pct-a.pct)/dt*60]); }
+    h+=panel('s6','Progress',lineChart([{pts:L.progress.map(p=>[p.t,p.pct]),color:'var(--c1)',area:true}],{yFmt:v=>v+'%',xFmt:fmtClock,xMin:L.progress[0].t}));
+    h+=panel('s6','Render speed',lineChart([{pts:sp,color:'var(--c3)'}],{yFmt:v=>fmtNum(v,v<10?1:0)+'%/m',xFmt:fmtClock,xMin:L.progress[0].t,ml:64}),'percent of image finished per minute; dips show expensive regions');
+    h+=panel('s12','Progress lines',stable([{k:'t',label:'Log time',n:1,f:v=>fmtClock(v)},{k:'pct',label:'Done',n:1,f:v=>v+'%'},{k:'rpp',label:'Rays / pixel',n:1,f:fmtInt},{k:'dt',label:'Step time',n:1,f:v=>v==null?'—':fmtDur(v)},{k:'mem',label:'Memory',n:1,f:fmtMB}],L.progress.map((p,i)=>({...p,dt:i?p.t-L.progress[i-1].t:null}))));
+  }
+  return h+'</div>';
+}
+function vMemory(L){
+  let h=headerStrip(L)+'<div class="grid">';
+  if(!L.memTrees.length) h+=panel('s12','Peak memory','<div class="empty">No "peak CPU memory used" section. Arnold prints it with stats enabled at the end of the render.</div>');
+  L.memTrees.forEach(t=>{ h+=panel('s7',esc(t.label),treeView(t,fmtMB),fmtMB(t.v)); h+=panel('s5','Top level',donutBlock(t.children.map(c=>({label:c.label,v:c.v})),{center:fmtMB(t.v),sub:'peak',fmt:fmtMB,max:9})); });
+  const geo=L.memTree&&findNode(L.memTree,/^geometry/i);
+  if(geo&&geo.children.length){ const pm=findNode(geo,/^polymesh/i); h+=panel('s6','Geometry memory',bars((pm&&pm.children.length?pm.children:geo.children).map((c,i)=>({label:c.label,v:c.v,c:COL[i%COL.length]})).sort((a,b)=>b.v-a.v),{fmt:fmtMB}),pm?'polymesh components':''); }
+  const I=L.info;
+  h+=panel(geo?'s6':'s12','Host headroom',I.ramMB&&L.peakMB?bars([{label:'Peak used',v:L.peakMB,c:L.peakMB/I.ramMB>0.8?'var(--err)':L.peakMB/I.ramMB>0.5?'var(--warn)':'var(--c1)'},{label:'Host RAM',v:I.ramMB,c:'var(--c9)'},...(I.gpus.map(g=>({label:`GPU ${g.id} VRAM`,v:g.mb,c:'var(--c3)'}))),...(I.texMax?[{label:'Texture cache limit',v:I.texMax,c:'var(--c8)'}]:[])],{fmt:fmtMB}):'<div class="empty">Host RAM is not listed in this log.</div>');
+  h+=panel('s12','Memory over time',memChart(L,260),L.memSeries.length?`${fmtInt(L.memSeries.length)} samples · max ${fmtMB(Math.max(...L.memSeries.map(p=>p[1])))}`:'');
+  return h+'</div>';
+}
+function rayTable(tb,isShader){
+  const cols=[{k:'name',label:isShader?'Shader context':'Ray type'},{k:'total',label:'Count',n:1,f:fmtInt},{k:'perPixel',label:'/ pixel',n:1,f:v=>fmtNum(v)},{k:'perSample',label:'/ sample',n:1,f:v=>fmtNum(v)},{k:'pct',label:'% total',n:1,f:v=>`<span class="heat" style="background:color-mix(in srgb,var(--accent) ${Math.min(60,(v||0)*1.1)}%,transparent)">${fmtPct(v,2)}</span>`}];
+  if(!isShader && tb.rows.some(r=>r.avgHits!=null)) cols.push({k:'avgHits',label:'Avg. hits',n:1,f:v=>fmtNum(v)},{k:'maxHits',label:'Max hits',n:1,f:fmtInt});
+  return stable(cols,tb.rows,{sort:'total',total:tb.total?{...tb.total,name:'total'}:null});
+}
+function vRays(L){
+  const I=L.info; let h=headerStrip(L)+'<div class="grid">';
+  const cps=L.rays?.rows.find(r=>r.name==='camera')?.perPixel;
+  if(I.samples.length||I.aa!=null){
+    const rows=[{type:'camera (AA)',samples:I.aa,depth:null,per:I.aa!=null?I.aa*I.aa:null,note:I.aaMax?`adaptive up to ${I.aaMax*I.aaMax}/px`:''},...I.samples.map(s=>({type:s.type,samples:s.samples,depth:s.depth,per:s.samples*s.samples,note:cps?`≈ ${fmtInt(s.samples*s.samples*cps)} per pixel at depth 1`:''}))];
+    h+=panel('s12','Sampling settings',stable([{k:'type',label:'Ray type'},{k:'samples',label:'Samples',n:1},{k:'per',label:'Rays per camera sample',n:1,f:fmtInt},{k:'depth',label:'Max depth',n:1,f:v=>v??'—'},{k:'note',label:'Note',nosort:1}],rows),`total depth ${I.totalDepth??'—'} · transparency depth ${I.transpDepth??'—'}${I.adaptive?` · adaptive ${I.adaptiveThr}`:''}`);
+  }
+  if(L.rays){
+    h+=panel('s8','Ray counts',rayTable(L.rays),L.rays.total?.total?`${fmtInt(L.rays.total.total)} rays`:'');
+    h+=panel('s4','Share by type',donutBlock(L.rays.rows.map(r=>({label:r.name,v:r.total})),{center:fmtInt(L.rays.total?.perPixel),sub:'rays / px',fmt:v=>(v/1e6).toFixed(1)+'M'}));
+    h+=panel('s6','Rays per pixel',bars([...L.rays.rows].sort((a,b)=>(b.perPixel||0)-(a.perPixel||0)).map((r,i)=>({label:r.name,v:r.perPixel||0,c:COL[i%COL.length]})),{fmt:v=>fmtNum(v,1)}));
+    if(L.rays.depth&&L.rays.depth.rows.length){ const d=L.rays.depth; const mx=Math.max(...d.rows.flatMap(r=>r.vals));
+      h+=panel('s6','Rays by bounce depth',`<div class="tw"><table class="tbl"><thead><tr><th>Type</th>${d.levels.map(l=>`<th class="n">depth ${l}</th>`).join('')}</tr></thead><tbody>${d.rows.map(r=>`<tr><td>${esc(r.name)}</td>${r.vals.map(v=>`<td class="n"><span class="heat" style="background:color-mix(in srgb,var(--c2) ${Math.round(v/mx*65)}%,transparent)">${v.toFixed(1)}%</span></td>`).join('')}</tr>`).join('')}</tbody></table></div>`,'share of rays at each bounce'); }
+  } else h+=panel('s12','Ray counts','<div class="empty">No "ray counts" section in this log.</div>');
+  if(L.shaders){
+    h+=panel('s8','Shader calls',rayTable(L.shaders,true),L.shaders.total?.total?`${fmtInt(L.shaders.total.total)} calls`:'');
+    h+=panel('s4','Shader call share',donutBlock(L.shaders.rows.map(r=>({label:r.name,v:r.total})),{center:fmtNum(L.shaders.total?.perPixel,0),sub:'calls / px',fmt:v=>(v/1e6).toFixed(1)+'M'}));
+  }
+  const shadeNodes=L.selfNode.filter(n=>/\((standard_\w+|\w*shader|\w+_surface|osl|image|aov_\w+|lambert|flat|utility|toon|mix_shader|ramp_\w+|layer_\w+)\)$/i.test(n.label));
+  if(shadeNodes.length) h+=panel('s12','Most expensive materials',bars(shadeNodes.map((c,i)=>{ const m=c.label.match(/^(.*?)\s*\(([^)]+)\)$/); return {label:m[1],sub:m[2],v:c.v,c:COL[i%COL.length]}; }),{fmt:v=>fmtDur(v)}),'self time of shader nodes');
+  return h+'</div>';
+}
+function vTextures(L){
+  const t=L.tex, I=L.info; let h=headerStrip(L);
+  if(!t){ return h+panel('','Textures','<div class="empty">No OpenImageIO texture statistics in this log. Arnold prints them at the end of a render when stats are on (verbosity 2+).</div>'); }
+  const bad=t.files.filter(f=>f.flags.length);
+  const k=[{k:'Unique images',v:fmtInt(t.unique),s:`${bad.length} need attention`,cls:bad.length?'warn':''},{k:'Referenced',v:fmtMB(t.refMB),s:`files on disk ${fmtMB(t.fileMB)}`},{k:'Pixel data read',v:fmtMB(t.readMB),s:t.refMB?`${fmtPct(t.readMB/t.refMB*100)} of referenced`:''},{k:'File I/O',v:fmtDur(t.io),s:t.openTime!=null?`open ${fmtDur(t.openTime)} · ${t.ioThreads||'?'} threads`:''},{k:'Peak cache',v:fmtMB(t.peakMB),s:I.texMax?`limit ${fmtMB(I.texMax)}`:''},{k:'Main cache misses',v:t.mainMiss?(t.mainMiss.match(/\(([\d.]+)%\)/)?fmtPct(+t.mainMiss.match(/\(([\d.]+)%\)/)[1],3):t.mainMiss):'—',s:t.microMiss?`micro ${t.microMiss.match(/\(([\d.]+)%\)/)?fmtPct(+t.microMiss.match(/\(([\d.]+)%\)/)[1],2):t.microMiss}`:''}];
+  h+=`<div class="kpis">${k.map(x=>`<div class="kpi ${x.cls||''}"><div class="k">${x.k}</div><div class="v">${esc(x.v)}</div><div class="s">${esc(x.s||' ')}</div></div>`).join('')}</div><div class="grid" style="margin-top:16px">`;
+  const short=p=>p.split('/').pop();
+  h+=panel('s12','Texture files',stable([
+    {k:'path',label:'File',cls:'p',sv:r=>short(r.path),f:(v,r)=>`<div>${esc(short(v))}</div><div class="muted">${esc(v.slice(0,v.length-short(v).length))}</div>`},
+    {k:'flags',label:'Flags',sv:r=>r.flags.length,f:v=>v.length?v.map(x=>`<span class="flag ${/BROKEN/.test(x)?'e':''}">${esc(x)}</span>`).join(''):'<span class="flag ok">TILED · MIPPED</span>'},
+    {k:'res',label:'Resolution',sv:r=>r.w*r.h,f:(v,r)=>`<span class="mono">${r.w}×${r.h}</span> <span class="muted mono">${r.ch||''}ch ${esc(r.fmt)}</span>`},
+    {k:'tiles',label:'Tiles',n:1,f:fmtInt},{k:'mb',label:'MB read',n:1,f:v=>fmtNum(v,1)},{k:'redMB',label:'Redundant MB',n:1,f:v=>v?`<span style="color:var(--warn)">${fmtNum(v,1)}</span>`:'—'},{k:'io',label:'I/O time',n:1,f:v=>fmtDur(v)}],t.files,{sort:'mb'}),`${t.files.length} files · click a column to sort`);
+  h+=panel('s6','Data read per file',bars([...t.files].sort((a,b)=>b.mb-a.mb).slice(0,15).map(f=>({label:short(f.path),v:f.mb,c:f.flags.length?'var(--warn)':'var(--c1)'})),{fmt:v=>fmtMB(v)}),'amber = untiled, unmipped or not .tx');
+  h+=panel('s6','I/O time per file',bars([...t.files].sort((a,b)=>b.io-a.io).slice(0,15).map(f=>({label:short(f.path),v:f.io,c:f.flags.length?'var(--warn)':'var(--c3)'})),{fmt:v=>fmtDur(v)}));
+  if(t.queries.length) h+=panel('s6','Lookups',stable([{k:'type',label:'Query type'},{k:'q',label:'Queries',n:1,f:fmtInt},{k:'b',label:'Batches',n:1,f:fmtInt},{k:'avg',label:'Per batch',n:1,f:v=>v?fmtNum(v,1):'—'}],t.queries.map(q=>({...q,avg:q.b?q.q/q.b:null}))));
+  h+=panel('s6','Cache',kv([['Options',t.options?`<span class="muted">${esc(t.options)}</span>`:null],['Tiles',t.tiles?esc(t.tiles):null],['Tile requests',t.tileReq?fmtInt(t.tileReq):null],['Main misses',t.mainMiss?esc(t.mainMiss):null],['Micro misses',t.microMiss?esc(t.microMiss):null],['Redundant reads',t.redundant?esc(t.redundant):null],['Broken files',t.broken?esc(t.broken):null]])+`<details><summary>Raw OpenImageIO block</summary><pre class="raw">${esc(t.raw.join('\n'))}</pre></details>`);
+  return h+'</div>';
+}
+function vGeometry(L){
+  const I=L.info; let h=headerStrip(L)+'<div class="grid">';
+  h+=panel('s6','Scene',kv([['Nodes initialized',I.nodes?fmtInt(I.nodes):null],['Nodes updated',I.nodesUpd?fmtInt(I.nodesUpd):null],['Node init',I.initTime!=null?fmtDur(I.initTime):null],['Node update',I.updTime!=null?fmtDur(I.updTime):null],['Lights',I.lights?esc(I.lights):null],['Bounds min',I.bounds?I.bounds[0].map(v=>fmtNum(v,2)).join(', '):null],['Bounds max',I.bounds?I.bounds[1].map(v=>fmtNum(v,2)).join(', '):null],['Extent',I.bounds?I.bounds[1].map((v,i)=>fmtNum(v-I.bounds[0][i],1)).join(' × '):null],['Scene file',I.scene?esc(I.scene):null]]));
+  h+=panel('s6','Subdivision & acceleration',(I.subdiv.length?`<h3 style="margin-top:0">Subdivided objects</h3><div class="bars">${I.subdiv.map(s=>`<div class="mono" style="font-size:12px;word-break:break-all">${esc(s)}</div>`).join('')}</div>`:'')+(I.accel.length?`<h3>Acceleration structures</h3><div class="bars">${I.accel.map(s=>`<div class="mono" style="font-size:12px">${esc(s)}</div>`).join('')}</div>`:'')||'<div class="empty">No subdivision or accel lines in this log.</div>');
+  L.tables.forEach(tb=>{
+    const ncol=Math.max(...tb.rows.map(r=>r.vals.length));
+    const cols=[...tb.cols]; while(cols.length<ncol) cols.push('');
+    h+=panel(tb.rows.length>4||ncol>3?'s12':'s6',esc(tb.title),`<div class="tw"><table class="tbl"><thead><tr><th></th>${cols.slice(0,ncol).map(c=>`<th class="n">${esc(c)}</th>`).join('')}</tr></thead><tbody>${tb.rows.map(r=>`<tr><td style="padding-left:${10+Math.max(0,r.ind-2)*6}px">${esc(r.name)}</td>${Array.from({length:ncol},(_,i)=>{ const v=r.vals[i]; return `<td class="n">${v==null?'':(/^-?\d+$/.test(v)?fmtInt(+v):esc(v))}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`);
+  });
+  if(L.rawSections.length) h+=panel('s12','Other stats sections',L.rawSections.map(s=>`<details><summary>${esc(s.title)}</summary><pre class="raw">${esc(s.lines.join('\n'))}</pre></details>`).join(''),'sections this version of the inspector shows as text');
+  return h+'</div>';
+}
+function vWarnings(L){
+  let h=headerStrip(L)+'<div class="grid">';
+  const item=(g,e)=>`<div class="wi ${e?'e':''}"><div class="wc">${g.count}</div><div><div class="wm">${esc(g.first.msg.trim())}</div><div class="wt">${g.tag?`[${esc(g.tag)}] · `:''}first at line ${g.first.n}${g.first.untimed?'':' · '+fmtClock(g.first.t)}${g.count>1?` · ${g.count} occurrences`:''}</div></div><button class="lnk" type="button" data-jump="${g.first.n}">Show in log</button></div>`;
+  h+=panel('s12','Errors',L.uniqueErrors.length?`<div class="wl">${L.uniqueErrors.map(g=>item(g,1)).join('')}</div>`:'<div class="empty">No errors.</div>',`${L.errors.length} lines`);
+  h+=panel('s7','Warnings, grouped',L.uniqueWarnings.length?`<div class="wl">${L.uniqueWarnings.map(g=>item(g)).join('')}</div>`:'<div class="empty">No warnings.</div>',`${L.warnings.length} lines · ${L.uniqueWarnings.length} kinds`);
+  const byTag={}; L.warnings.forEach(o=>{ const k=o.tag||'core'; byTag[k]=(byTag[k]||0)+1; });
+  h+=panel('s5','By source',Object.keys(byTag).length?donutBlock(Object.entries(byTag).map(([label,v])=>({label:`[${label}]`,v})),{center:String(L.warnings.length),sub:'warnings',fmt:v=>String(v)}):'<div class="empty">No warnings.</div>')
+  if(L.warnSummary.length) h+=panel('s12','Arnold warning summary',stable([{k:'count',label:'Count',n:1},{k:'msg',label:'Warning type',cls:'p'}],L.warnSummary,{sort:'count'}),'as printed at the end of the render');
+  return h+'</div>';
+}
+function vSystem(L){
+  const I=L.info; let h=headerStrip(L)+'<div class="grid">';
+  h+=panel('s6','Machine',kv([['Host',I.host?esc(I.host):null],['PID',I.pid],['CPU',I.cpu?`${I.sockets>1?I.sockets+' × ':''}${esc(I.cpu)}`:null],['Cores',I.cores?`${I.cores} physical · ${I.logical} logical`:null],['Threads used',I.threads?`${I.threads}${I.logical?` (${fmtPct(I.threads/I.logical*100,0)} of logical)`:''}`:null],['RAM',I.ramMB?fmtMB(I.ramMB):null],['Render device',I.device?esc(I.device):null],['OS',I.os?esc(I.os):null],['NVIDIA driver',I.driver],...I.gpus.map(g=>[`GPU ${g.id}`,`${esc(g.name)} · ${fmtMB(g.mb)} · ${g.mhz} MHz`])]));
+  h+=panel('s6','Arnold build',kv([['Version',I.version?esc(I.version):null],['Build',I.build?esc(I.build):null],['Build date',I.buildDate],['Platform',I.platform?esc(I.platform):null],['Host plugin',I.dcc?`${esc(I.dcc)} ${esc(I.host_app||'')}`:null],['Log started',I.started?esc(I.started):null],['License',I.license.length?I.license.map(esc).join('<br>'):null]])+(I.libs.length?`<h3>Libraries</h3><div>${I.libs.map(([n,v])=>`<span class="flag ok" style="font-family:var(--mono)">${esc(n)} ${esc(v)}</span>`).join('')}</div>`:''));
+  h+=panel('s6','Color management',kv([['OCIO config',I.ocio?esc(I.ocio):null],['Rendering space',I.colorspace?esc(I.colorspace):null]]));
+  h+=panel('s6','Plugins',kv([['Loaded',I.plugins!=null?`${I.plugins} plugins from ${I.pluginLibs} libs${I.pluginTime!=null?` in ${fmtDur(I.pluginTime)}`:''}`:null],['Search paths',I.pluginPaths.length?I.pluginPaths.map(esc).join('<br>'):null]])+(I.pluginNodes.length?`<h3>Plugin nodes</h3>`+stable([{k:0,label:'Library'},{k:1,label:'Node'}],I.pluginNodes):''));
+  if(I.outputs.length) h+=panel('s12','Outputs',stable([{k:'name',label:'Driver'},{k:'type',label:'Type'},{k:'path',label:'Path',cls:'p'}],I.outputs),I.written.length?`${I.written.length} files written`:'');
+  if(I.aovs.length) h+=panel('s12','AOVs',stable([{k:'name',label:'AOV'},{k:'type',label:'Type'},{k:'filter',label:'Filter'},{k:'driver',label:'Driver'}],I.aovs),`${I.aovCount||I.aovs.length} AOVs`);
+  return h+'</div>';
+}
+function vLog(L){
+  const tags=[...new Set(L.lines.map(o=>o.tag).filter(Boolean))].sort();
+  const f=state.lf;
+  return headerStrip(L)+`<section class="panel"><div class="lf">
+    <input type="search" id="lq" placeholder="Search the log (text or /regex/)" value="${esc(f.q)}" aria-label="Search">
+    <select id="llvl" aria-label="Level"><option value="all">All levels</option><option value="warn" ${f.lvl==='warn'?'selected':''}>Warnings + errors</option><option value="err" ${f.lvl==='err'?'selected':''}>Errors only</option></select>
+    <select id="ltag" aria-label="Source"><option value="all">All sources</option>${tags.map(t=>`<option value="${esc(t)}" ${f.tag===t?'selected':''}>[${esc(t)}]</option>`).join('')}</select>
+    <label><input type="checkbox" id="lstat" ${f.stats?'checked':''}> stats blocks</label>
+    <span class="muted mono" id="lcount" style="font-size:12px"></span></div><div class="logv" id="logv"></div></section>`;
+}
+function fillLog(){
+  const L=cur(), f=state.lf, el=document.getElementById('logv'); if(!el) return;
+  let re=null; if(f.q){ const m=f.q.match(/^\/(.+)\/([i]*)$/); try{ re=m?new RegExp(m[1],m[2]||'i'):new RegExp(f.q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i'); }catch(e){ re=null; } }
+  const rows=L.lines.filter(o=>(f.lvl==='all'||(f.lvl==='warn'&&o.level)||(f.lvl==='err'&&o.level==='ERROR'))&&(f.tag==='all'||o.tag===f.tag)&&(f.stats||!o.stat)&&(!re||re.test(o.msg)));
+  const MAX=4000, shown=rows.slice(0,MAX);
+  const hl=s=>{ let e=esc(s); if(re){ try{ const r2=new RegExp(re.source,'gi'); e=e.replace(r2,m=>`<mark>${m}</mark>`); }catch(x){} } return e.replace(/^(\s*)\[([^\]]{1,28})\]/,'$1<span class="tag">[$2]</span>'); };
+  el.innerHTML=shown.map(o=>`<div class="lr ${o.level==='WARNING'?'w':o.level==='ERROR'?'e':''}" id="ln${o.n}"><span class="ln">${o.n}</span><span class="lt">${o.untimed?'':fmtClock(o.t)}</span><span class="lm">${o.mem!=null?fmtMB(o.mem):''}</span><span class="lx">${o.level?`<b>${o.level}</b> `:''}${hl(o.msg)}</span></div>`).join('')||'<div class="empty" style="padding:12px">No lines match these filters.</div>';
+  document.getElementById('lcount').textContent=`${fmtInt(rows.length)} of ${fmtInt(L.lines.length)} lines${rows.length>MAX?` · showing first ${fmtInt(MAX)}`:''}`;
+}
+function vSequence(){
+  const logs=state.logs;
+  if(logs.length<2) return `<section class="panel"><h2>Compare logs</h2><p class="muted" style="max-width:62ch;margin:0">Open two or more logs (a frame range from the farm, or before/after an optimisation) to compare render time, memory, rays and warnings side by side. Select several files in <b>Open logs…</b> or drop them on the page.</p></section>`;
+  const base=logs[0];
+  const rows=logs.map((L,i)=>({i,name:L.name,host:L.info.host||'—',ft:L.frameTime,peak:L.peakMB,rpp:L.rays?.total?.perPixel??(L.progress.length?L.progress[L.progress.length-1].rpp:null),util:L.util,tex:L.tex?.readMB??null,warn:L.warnings.length,err:L.errors.length}));
+  const delta=(v,b,fmt)=>v==null||b==null||i===0?'':'';
+  const d=(v,b)=>{ if(v==null||b==null||!b) return ''; const p=(v-b)/b*100; if(Math.abs(p)<0.5) return ''; return ` <span style="color:${p>0?'var(--err)':'var(--ok)'};font-size:11px">${p>0?'+':''}${p.toFixed(1)}%</span>`; };
+  let h='<div class="grid">';
+  h+=panel('s12','Logs side by side',stable([{k:'name',label:'Log',cls:'p'},{k:'host',label:'Host'},{k:'ft',label:'Frame time',n:1,f:(v,r)=>fmtDur(v)+(r.i?d(v,rows[0].ft):'')},{k:'peak',label:'Peak memory',n:1,f:(v,r)=>fmtMB(v)+(r.i?d(v,rows[0].peak):'')},{k:'rpp',label:'Rays / px',n:1,f:(v,r)=>fmtInt(v)+(r.i?d(v,rows[0].rpp):'')},{k:'util',label:'Util.',n:1,f:v=>fmtPct(v)},{k:'tex',label:'Tex read',n:1,f:v=>fmtMB(v)},{k:'warn',label:'Warn',n:1},{k:'err',label:'Err',n:1}],rows),`deltas are against ${esc(base.name)}`);
+  const short=n=>n.replace(/\.(log|txt|json)$/,'').slice(-28);
+  h+=panel('s6','Frame time',bars(rows.map((r,i)=>({label:short(r.name),v:r.ft||0,c:COL[0]})),{fmt:v=>fmtDur(v)}));
+  h+=panel('s6','Peak memory',bars(rows.map(r=>({label:short(r.name),v:r.peak||0,c:COL[1]})),{fmt:v=>fmtMB(v)}));
+  if(rows.length>=3) h+=panel('s12','Across the range',lineChart([{pts:rows.map((r,i)=>[i+1,r.ft||0]),color:'var(--c1)',area:true}],{yFmt:v=>fmtDur(v),xFmt:v=>Number.isInteger(v)?'#'+v:'',xMin:1,label:'frame time per log',ml:72}),'frame time per log in load order');
+  return h+'</div>';
+}
+
+/* ---------- shell ---------- */
+function renderFiles(){
+  const el=document.getElementById('files');
+  el.innerHTML=state.logs.map((L,i)=>`<span class="chipf ${i===state.active?'on':''}" data-i="${i}" role="button" tabindex="0"><span class="nm" title="${esc(L.name)}">${esc(L.name)}</span>${L.sample?'<span class="sample-tag">sample</span>':''}<small>${fmtDur(L.frameTime)}</small><button class="x" type="button" data-x="${i}" aria-label="Remove ${esc(L.name)}">×</button></span>`).join('')+
+    (state.logs.length&&state.logs[0].sample?`<span class="hint" style="margin:0">This is an example log. Open or drop your own <code>.log</code> / <code>.json</code>; files stay in your browser.</span>`:'');
+}
+function renderTabs(){
+  const L=cur(); const cnt={warnings:L?(L.errors.length?`<span class="cnt e">${L.errors.length}</span>`:L.warnings.length?`<span class="cnt w">${L.warnings.length}</span>`:''):'',sequence:state.logs.length>1?`<span class="cnt">${state.logs.length}</span>`:'',log:L?`<span class="cnt">${fmtInt(L.lines.length)}</span>`:''};
+  document.getElementById('tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab ${state.tab===k?'on':''}" role="tab" aria-selected="${state.tab===k}" data-tab="${k}" type="button">${l}${cnt[k]||''}</button>`).join('');
+}
+function render(){
+  TB={}; tbN=0;
+  renderFiles(); renderTabs();
+  const L=cur(), v=document.getElementById('view');
+  if(!L){ v.innerHTML=`<section class="panel"><h2>No log loaded</h2><p class="muted">Open or drop an Arnold render log to begin.</p></section>`; return; }
+  const fn={overview:vOverview,time:vTime,memory:vMemory,rays:vRays,textures:vTextures,geometry:vGeometry,warnings:vWarnings,system:vSystem,log:vLog,sequence:vSequence}[state.tab]||vOverview;
+  try{ v.innerHTML=fn(L); }catch(e){ console.error(e); v.innerHTML=`<section class="panel"><h2>Couldn't draw this view</h2><p class="muted">${esc(e.message)}. The other tabs may still work; the raw lines are in the Log tab.</p></section>`; }
+  if(state.tab==='log') bindLog();
+}
+function bindLog(){
+  fillLog();
+  let tmr; document.getElementById('lq').addEventListener('input',e=>{ clearTimeout(tmr); tmr=setTimeout(()=>{ state.lf.q=e.target.value; fillLog(); },160); });
+  document.getElementById('llvl').addEventListener('change',e=>{ state.lf.lvl=e.target.value; fillLog(); });
+  document.getElementById('ltag').addEventListener('change',e=>{ state.lf.tag=e.target.value; fillLog(); });
+  document.getElementById('lstat').addEventListener('change',e=>{ state.lf.stats=e.target.checked; fillLog(); });
+}
+document.getElementById('tabs').addEventListener('click',e=>{ const b=e.target.closest('[data-tab]'); if(!b) return; state.tab=b.dataset.tab; try{ localStorage.setItem('ali.tab',state.tab); }catch(x){} render(); window.scrollTo({top:0}); });
+document.getElementById('files').addEventListener('click',e=>{
+  const x=e.target.closest('[data-x]'); if(x){ e.stopPropagation(); state.logs.splice(+x.dataset.x,1); state.active=Math.min(state.active,state.logs.length-1); render(); return; }
+  const c=e.target.closest('[data-i]'); if(c){ state.active=+c.dataset.i; render(); }
+});
+document.getElementById('files').addEventListener('keydown',e=>{ if((e.key==='Enter'||e.key===' ')&&e.target.dataset.i!=null){ e.preventDefault(); state.active=+e.target.dataset.i; render(); } });
+document.getElementById('view').addEventListener('click',e=>{
+  const j=e.target.closest('[data-jump]'); if(!j) return;
+  state.tab='log'; state.lf={q:'',lvl:'all',tag:'all',stats:true}; render();
+  const row=document.getElementById('ln'+j.dataset.jump); if(row){ row.scrollIntoView({block:'center'}); row.style.outline='2px solid var(--accent)'; }
+});
+async function addTexts(items){
+  let added=0;
+  for(const {name,text} of items){
+    try{ const L=parseAny(text,name); state.logs=state.logs.filter(x=>!x.sample); state.logs.push(L); added++; }
+    catch(e){ toast(`Couldn't read ${name}: ${e.message}.`); }
+  }
+  if(added){ state.logs.sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})); state.active=state.logs.length-added>=0?state.logs.length-1:0; if(added>1){ state.active=0; } render(); toast(`Loaded ${added} log${added>1?'s':''}.`); }
+}
+async function addFiles(files){ const items=[]; for(const f of files){ try{ items.push({name:f.name,text:await f.text()}); }catch(e){ toast(`Couldn't open ${f.name}.`); } } addTexts(items); }
+document.getElementById('fileIn').addEventListener('change',e=>{ addFiles([...e.target.files]); e.target.value=''; });
+const pp=document.getElementById('pastePanel');
+document.getElementById('pasteBtn').addEventListener('click',()=>{ pp.hidden=!pp.hidden; if(!pp.hidden) document.getElementById('pasteTa').focus(); });
+document.getElementById('pasteCancel').addEventListener('click',()=>{ pp.hidden=true; });
+document.getElementById('pasteGo').addEventListener('click',()=>{ const t=document.getElementById('pasteTa').value; if(!t.trim()){ toast('Paste a log first.'); return; } pp.hidden=true; document.getElementById('pasteTa').value=''; addTexts([{name:`pasted-${state.logs.filter(l=>!l.sample).length+1}.log`,text:t}]); });
+const drop=document.getElementById('drop'); let dc=0;
+window.addEventListener('dragenter',e=>{ if([...(e.dataTransfer?.types||[])].includes('Files')){ dc++; drop.hidden=false; } });
+window.addEventListener('dragleave',()=>{ dc=Math.max(0,dc-1); if(!dc) drop.hidden=true; });
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{ e.preventDefault(); dc=0; drop.hidden=true; if(e.dataTransfer?.files?.length) addFiles([...e.dataTransfer.files]); });
+
+const S=parseLog(makeSample(),'sh0210_lgt_v047.1042.log'); S.sample=true; state.logs=[S];
+render();
+</script>
+</body>
+</html>
